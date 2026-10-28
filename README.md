@@ -1,4 +1,4 @@
-# dsh-session-history-search · 会话历史搜索
+# dsh-find-history · 查找历史
 
 在 DSH Web 侧栏「工作区」标题行加一个搜索图标。点开后输入关键词，就能在所有工作区里搜出**你自己说过的内容**，找回忘记的那个会话并继续聊。
 
@@ -31,19 +31,19 @@
 
 ## 安装
 
-装完刷新页面（或重启 `dsh web`）。侧栏「插件」页的已安装列表里能看到「会话历史搜索」，可以随时停用。
+装完刷新页面（或重启 `dsh web`）。侧栏「插件」页的已安装列表里能看到「查找历史」，可以随时停用。
 
 **1) 从 GitHub 源码安装**
 
 ```bash
-dsh plugin --profile web add github:OWNER/dsh-session-history-search
+dsh plugin --profile web add github:OWNER/dsh-find-history
 ```
 
 **2) 让 AI 助手帮你装**
 
 把这句话发给任意能执行命令的 agent：
 
-> 根据 `OWNER/dsh-session-history-search` 仓库里的 INSTALL_GUIDE.md 安装并验证这个插件。
+> 根据 `OWNER/dsh-find-history` 仓库里的 INSTALL_GUIDE.md 安装并验证这个插件。
 
 `dsh plugin add` 把包名直接转给 pnpm 装进 profile，并把 bundle 加进 `dsh.profile.bundles`。本插件是纯 JS、没有构建步骤，git 安装不需要额外授权 `allowBuilds`。
 
@@ -65,7 +65,7 @@ DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.j
 
 1. **扫描 zstd 帧头**（`0x28 0xb5 0x2f 0xfd`）得到帧边界；
 2. 逐帧解压后**只解析命中标记的行**（`"type":"user/message"` / `"assistant/message"` / `"session/title"`），其余行整行跳过；
-3. 每个会话存一个**侧车文件**（`~/.dsh/cache/session-history-search/`），记录读到的字节数、帧数、标题和提取出的消息；
+3. 每个会话存一个**侧车文件**（`~/.dsh/cache/find-history/`），记录读到的字节数、帧数、标题和提取出的消息；
 4. 日志变大时**只从上次的字节位置续读**（增量尾部解压），不是重扫；
 5. 首次安装时把回填任务丢给**子进程分批做**（每批约 12MB、最多 2 个 worker），父进程内存不涨；
 6. 搜索就是**内存里扫 700 多条消息**——一次 0.1ms 量级。
@@ -83,7 +83,7 @@ DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.j
 
 ## 隐私
 
-- 只读本机 `~/.dsh/sessions/` 下的会话日志，只写 `~/.dsh/cache/session-history-search/`。
+- 只读本机 `~/.dsh/sessions/` 下的会话日志，只写 `~/.dsh/cache/find-history/`。
 - 不发任何网络请求。
 - 会话日志本身不会被修改；卸载插件后把 cache 目录删掉即可。
 
@@ -113,8 +113,8 @@ icon.svg         插件列表图标
 仓库已就绪，推送前把 README 里的 `OWNER` 换成你的 GitHub 账号：
 
 ```bash
-gh repo create OWNER/dsh-session-history-search --public --source=. --push \
-  --description "DSH 侧栏内联的会话历史搜索：按你输入过的内容找回忘记的会话（中文友好、毫秒级、零依赖）"
+gh repo create OWNER/dsh-find-history --public --source=. --push \
+  --description "DSH 侧栏内联的查找历史：按你输入过的内容找回忘记的会话（中文友好、毫秒级、零依赖）"
 gh repo edit --add-topic dsh-plugin --add-topic dsh --add-topic session-search --add-topic conversation-history
 ```
 

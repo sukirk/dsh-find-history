@@ -1,5 +1,5 @@
 /**
- * dsh-session-history-search — backfill worker.
+ * dsh-find-history — backfill worker.
  *
  * Reads a batch of Session logs that the corpus has never seen and writes their
  * documents. It runs as a short-lived child process on purpose: inflating frames

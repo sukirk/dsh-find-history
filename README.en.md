@@ -1,4 +1,4 @@
-# dsh-session-history-search · Session History Search
+# dsh-find-history · Session History Search
 
 Adds a search icon to the Workspaces header in the DSH Web sidebar. Type a few words you remember writing, and it finds that forgotten conversation across **every** workspace so you can pick it up again.
 
@@ -36,14 +36,14 @@ Scope notes: Victue keeps its own full-corpus index and answers from it; dsh-ses
 From the GitHub source:
 
 ```bash
-dsh plugin --profile web add github:OWNER/dsh-session-history-search
+dsh plugin --profile web add github:OWNER/dsh-find-history
 ```
 
 Reload the page (or restart `dsh web`). The entry **Session History Search** appears in the sidebar **Plugins** page and can be toggled anytime. The package is plain JS with no build step, so git installs need no `allowBuilds` permission.
 
 Prefer to let an agent do it:
 
-> Install and verify the plugin by following `OWNER/dsh-session-history-search/INSTALL_GUIDE.md`.
+> Install and verify the plugin by following `OWNER/dsh-find-history/INSTALL_GUIDE.md`.
 
 ## Usage
 
@@ -62,7 +62,7 @@ DSH stores each session as a **multi-frame** zstd file at `~/.dsh/sessions/<work
 
 1. scan zstd frame headers (`0x28 0xb5 0x2f 0xfd`) to get frame boundaries;
 2. decompress frame by frame and parse **only** the lines it needs (`user/message`, `assistant/message`, `session/title`), skipping the rest;
-3. keep one **sidecar** per session under `~/.dsh/cache/session-history-search/` (bytes consumed, frame count, title, extracted messages);
+3. keep one **sidecar** per session under `~/.dsh/cache/find-history/` (bytes consumed, frame count, title, extracted messages);
 4. when a log grows, **continue from the last byte offset** instead of rescanning;
 5. first install backfills in **child processes** (≈12MB batches, at most 2 workers) so the host process stays small;
 6. searching is then an in-memory substring scan over a few hundred messages — about 0.1ms.
@@ -80,7 +80,7 @@ Measured on 134 sessions (193MB compressed, 818MB decompressed):
 
 ## Privacy
 
-Reads only `~/.dsh/sessions/`, writes only `~/.dsh/cache/session-history-search/`, makes no network requests, never modifies session logs. Delete the cache directory to forget everything.
+Reads only `~/.dsh/sessions/`, writes only `~/.dsh/cache/find-history/`, makes no network requests, never modifies session logs. Delete the cache directory to forget everything.
 
 ## Compatibility
 

@@ -1,5 +1,5 @@
 /**
- * dsh-session-history-search — client half.
+ * dsh-find-history — client half.
  *
  * Adds one icon to the sidebar's Workspaces header row, next to the shipped
  * session search and view controls. Pressing it turns the sidebar itself into
@@ -18,7 +18,7 @@
  * disappears with the plugin, leaving the sidebar as shipped.
  */
 window.__ModuleLoader__.load({
-	id: "dsh-session-history-search",
+	id: "dsh-find-history",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -29,13 +29,13 @@ window.__ModuleLoader__.load({
 		const { createPortal } = require("react-dom");
 		const h = React.createElement;
 
-		const NS = "session-history-search";
-		const STYLE_ID = "dsh-session-history-search-style";
-		const TRIGGER_ATTRIBUTE = "data-dsh-session-history-search";
+		const NS = "find-history";
+		const STYLE_ID = "dsh-find-history-style";
+		const TRIGGER_ATTRIBUTE = "data-dsh-find-history";
 		/** Set on the shipped browser container while the search surface is open. */
-		const INLINE_ATTRIBUTE = "data-dsh-session-history-search-open";
+		const INLINE_ATTRIBUTE = "data-dsh-find-history-open";
 		/** Exact route registered by the Host half. */
-		const ROUTE = "/dsh-session-history-search/search";
+		const ROUTE = "/dsh-find-history/search";
 		/** Keystroke settling before a request, so a typed word is one search. */
 		const DEBOUNCE_MS = 260;
 		/** Sessions requested per answer; the Host merges keywords before slicing. */
@@ -67,8 +67,8 @@ window.__ModuleLoader__.load({
 [class*="sectionHeader"]:not(:has([class*="searchSlotExpanded"])) > [class*="searchSlot"]{margin-left:0}
 [class*="sectionHeader"]:has([class*="searchSlotExpanded"]) .shs-trigger{display:none}
 [class*="_rail"] .shs-trigger,[class*="_rail"] .shs-inline{display:none}
-[data-dsh-session-history-search-open] > [class*="listArea"]{display:none}
-[data-dsh-session-history-search-open] [class*="searchSlot"],[data-dsh-session-history-search-open] [class*="headerActions"]{display:none}
+[data-dsh-find-history-open] > [class*="listArea"]{display:none}
+[data-dsh-find-history-open] [class*="searchSlot"],[data-dsh-find-history-open] [class*="headerActions"]{display:none}
 .shs-inline{box-sizing:border-box;position:relative;flex:1 1 0%;min-height:0;display:flex;flex-direction:column;gap:6px;padding:2px 0 4px 4px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}
 .shs-field{flex:none;display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-tertiary)}
 .shs-field:focus-within{border-color:var(--dsw-alias-state-business-primary)}
@@ -142,7 +142,7 @@ window.__ModuleLoader__.load({
 
 		const zh = {
 			trigger: "搜索会话历史",
-			dialogTitle: "会话历史搜索",
+			dialogTitle: "查找历史",
 			placeholder: "搜索对话内容",
 			hint: "搜索你在任意工作区输入过的内容，找回那个会话继续聊。",
 			searching: "搜索中…",
@@ -1397,14 +1397,14 @@ window.__ModuleLoader__.load({
 				return () => {
 					document.getElementById(STYLE_ID)?.remove();
 				};
-			}, "session-history-search: styles");
-			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "session-history-search: locale");
+			}, "find-history: styles");
+			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "find-history: locale");
 			const Component = createComponent(ctx);
 			ctx.slots.inject("shell.overlay", () =>
 				ctx.slots.register(
 					{
 						name: "shell.overlay",
-						id: "session-history-search",
+						id: "find-history",
 						order: 100,
 						priority: -1,
 						locale: NS,

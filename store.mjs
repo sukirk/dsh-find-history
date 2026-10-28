@@ -1,5 +1,5 @@
 /**
- * dsh-session-history-search — corpus storage.
+ * dsh-find-history — corpus storage.
  *
  * The corpus is one small document per Session, kept under the Harness cache
  * directory: the messages the user typed, the answer that closed each turn, plus
@@ -12,6 +12,7 @@ import {
   closeSync,
   mkdirSync,
   openSync,
+  existsSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -22,7 +23,9 @@ import {
 import { basename, dirname, join } from 'node:path'
 
 /** Directory under the Harness cache that owns this plugin's documents. */
-const CACHE_DIR = 'session-history-search'
+const CACHE_DIR = 'find-history'
+/** Cache directory the plugin used before it was renamed; moved aside on first start. */
+const PREVIOUS_CACHE_DIR = 'session-history-search'
 /** Session documents live in a subdirectory, one file each. */
 const DOC_DIR = 'sessions'
 /** Document format; a different version is read as an empty corpus. */
@@ -43,7 +46,25 @@ export function indexPaths(ctx) {
   const dshHomePath = typeof ctx.get === 'function' ? ctx.get('dshHomePath') : null
   if (typeof dshHomePath !== 'function') return null
   const root = dshHomePath('cache', CACHE_DIR)
+  migratePreviousCache(dshHomePath('cache'), root)
   return { root, docs: join(root, DOC_DIR), logs: dshHomePath(SESSIONS_DIR) }
+}
+
+/**
+ * Rename the cache directory of the previous plugin name, so an existing index
+ * is reused instead of rebuilt.
+ * @param {(name: string) => string} cachePath - resolves a cache entry.
+ * @param {string} root - current cache directory.
+ */
+function migratePreviousCache(cachePath, root) {
+  try {
+    if (existsSync(root)) return
+    const previous = cachePath(PREVIOUS_CACHE_DIR)
+    if (!existsSync(previous)) return
+    renameSync(previous, root)
+  } catch {
+    // A failed rename only costs one rebuild.
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 /**
- * dsh-session-history-search — host half.
+ * dsh-find-history — host half.
  *
  * Serves one authenticated JSON route for the sidebar search icon: it answers
  * which Sessions of any Workspace contain the keywords the user typed, with the
@@ -42,14 +42,14 @@ import {
   saveSessionDoc,
 } from './store.mjs'
 
-export const name = 'session-history-search'
+export const name = 'find-history'
 
 export const inject = ['webServer', 'connection', 'workspaceRegistry']
 
 /** Prefix some Harness versions write in front of a Session id. */
 const SESSION_PREFIX = 'session-'
 /** Exact pathname of the route the Client half queries. */
-const ROUTE_PATH = '/dsh-session-history-search/search'
+const ROUTE_PATH = '/dsh-find-history/search'
 /** Short-lived process that reads unseen Session logs, written next to this file. */
 const BACKFILL_SCRIPT = fileURLToPath(new URL('./backfill.mjs', import.meta.url))
 /** Sessions answered when the caller names no limit. */
@@ -825,7 +825,7 @@ async function handleSearch(ctx, req, res) {
     sendJson(res, 200, payload)
   } catch (error) {
     ctx.logger?.warn?.(
-      `[session-history-search] search failed: ${error instanceof Error ? error.message : String(error)}`,
+      `[find-history] search failed: ${error instanceof Error ? error.message : String(error)}`,
     )
     sendJson(res, 500, { error: 'search-failed' })
   }
@@ -1103,7 +1103,7 @@ function runBackfill(batch) {
       corpus.set(record.sessionId, doc)
     }
     if (indexed > 0) answerCache.clear()
-    pluginCtx?.logger?.debug?.(`[session-history-search] backfill ${stdout.slice(0, 200)}`)
+    pluginCtx?.logger?.debug?.(`[find-history] backfill ${stdout.slice(0, 200)}`)
     pumpBackfill()
   }
   child.on('error', finished)
@@ -1242,7 +1242,7 @@ export function apply(ctx) {
         path: ROUTE_PATH,
         handler: (req, res) => handleSearch(ctx, req, res),
       }),
-    'session-history-search: route',
+    'find-history: route',
   )
   ctx.effect(
     () => () => {
@@ -1259,7 +1259,7 @@ export function apply(ctx) {
       backfillQueue = []
       answerCache.clear()
     },
-    'session-history-search: corpus',
+    'find-history: corpus',
   )
   observeSessions(ctx)
   const startTimer = setTimeout(() => {

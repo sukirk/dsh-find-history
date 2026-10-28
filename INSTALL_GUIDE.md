@@ -1,6 +1,6 @@
 # INSTALL_GUIDE — for an AI agent or a human in a hurry
 
-Goal: install **dsh-session-history-search** into a DSH profile and confirm the sidebar search icon works.
+Goal: install **dsh-find-history** into a DSH profile and confirm the sidebar search icon works.
 
 ## 0. Prerequisites
 
@@ -16,17 +16,17 @@ The commands below write `dsh`; substitute whichever form you have.
 
 ```bash
 # from GitHub source
-dsh plugin --profile web add github:OWNER/dsh-session-history-search
+dsh plugin --profile web add github:OWNER/dsh-find-history
 
 # from a local checkout (development)
-dsh plugin --profile web add /path/to/dsh-session-history-search
+dsh plugin --profile web add /path/to/dsh-find-history
 ```
 
 Rules of thumb:
 
 - Use the profile that serves your UI. In the stock setup that is `web`; if you renamed it, substitute `<profile>`.
-- The command forwards to pnpm and appends the bundle to the profile's `dsh.profile.bundles`. Expect pnpm output ending with `+ dsh-session-history-search link:...` or `+ dsh-session-history-search 1.0.0`.
-- This package is plain JavaScript with **no build step**, so git installs need no `allowBuilds` permission. If pnpm still asks, allow `dsh-session-history-search` only.
+- The command forwards to pnpm and appends the bundle to the profile's `dsh.profile.bundles`. Expect pnpm output ending with `+ dsh-find-history link:...` or `+ dsh-find-history 1.0.0`.
+- This package is plain JavaScript with **no build step**, so git installs need no `allowBuilds` permission. If pnpm still asks, allow `dsh-find-history` only.
 - Do **not** hand-edit `~/.dsh/profiles/<profile>/package.json` or run pnpm in the profile directory yourself; let `dsh plugin add` do it.
 
 ## 2. Restart the Web UI
@@ -43,7 +43,7 @@ The printed URL is the one to open. `--no-open` keeps the browser closed; drop i
 Fast automated check — the sidecar index is built automatically a few seconds after the Host half loads (no search needed):
 
 ```bash
-sleep 6; ls ~/.dsh/cache/session-history-search/sessions 2>/dev/null | wc -l   # expect one file per unarchived session, > 0
+sleep 6; ls ~/.dsh/cache/find-history/sessions 2>/dev/null | wc -l   # expect one file per unarchived session, > 0
 ```
 
 The token for the Web UI is printed on stdout (`dsh web: http://127.0.0.1:<port>/?token=…`); DSH 0.2.1-rc.x does not write a `web.log`.
@@ -56,12 +56,12 @@ Human-visible checklist (open the URL from step 2):
 4. Hover a row → a preview popup shows the matched message with the keyword highlighted.
 5. Click a row → that session opens in the conversation pane.
 6. `Esc` closes the panel; reopen it and the previous query is still there.
-7. Sidebar **插件 / Plugins** page → “已安装插件 / Installed plugins”: the entry **会话历史搜索 / Session History Search** is listed and can be toggled off/on (display metadata comes from `locale/*.json` + `icon.svg`). Turning it off removes the icon immediately.
+7. Sidebar **插件 / Plugins** page → “已安装插件 / Installed plugins”: the entry **查找历史 / Session History Search** is listed and can be toggled off/on (display metadata comes from `locale/*.json` + `icon.svg`). Turning it off removes the icon immediately.
 
-If step 1 shows no new icon, the client half did not load: check the browser console for errors mentioning `dsh-session-history-search`, and confirm the profile entry exists:
+If step 1 shows no new icon, the client half did not load: check the browser console for errors mentioning `dsh-find-history`, and confirm the profile entry exists:
 
 ```bash
-grep -o 'dsh-session-history-search[^,]*' ~/.dsh/profiles/<profile>/package.json
+grep -o 'dsh-find-history[^,]*' ~/.dsh/profiles/<profile>/package.json
 ```
 
 ## 4. Troubleshooting
@@ -77,8 +77,8 @@ grep -o 'dsh-session-history-search[^,]*' ~/.dsh/profiles/<profile>/package.json
 ## 5. Uninstall
 
 ```bash
-dsh plugin --profile web remove dsh-session-history-search
-rm -rf ~/.dsh/cache/session-history-search
+dsh plugin --profile web remove dsh-find-history
+rm -rf ~/.dsh/cache/find-history
 ```
 
 Session logs are never modified, so uninstalling loses nothing else.

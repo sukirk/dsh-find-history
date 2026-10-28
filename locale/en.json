@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Session History Search",
+    "title": "Find History",
     "description": "Adds a search icon to the Workspaces header that finds a forgotten conversation by the words you typed in it, in any Workspace, and reopens it."
   }
 }

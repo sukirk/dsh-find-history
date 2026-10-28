@@ -1,5 +1,5 @@
 /**
- * dsh-session-history-search — Session log reading.
+ * dsh-find-history — Session log reading.
  *
  * A Session log is a concatenation of zstandard frames, and every frame holds
  * whole JSON event lines. Only a handful of event types carry what the search
