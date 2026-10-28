@@ -118,6 +118,19 @@ icon.svg         插件列表图标
 
 开发时把仓库目录用 `dsh plugin --profile web add /path/to/repo` 挂进去，改完在插件列表里关掉再打开即可重载 Host 半边。
 
+## 发布（维护者用）
+
+仓库已就绪，推送前把 README 里的 `OWNER` 换成你的 GitHub 账号：
+
+```bash
+gh repo create OWNER/dsh-session-history-search --public --source=. --push \
+  --description "DSH 侧栏内联的会话历史搜索：按你输入过的内容找回忘记的会话（中文友好、毫秒级、零依赖）"
+gh repo edit --add-topic dsh-plugin --add-topic dsh --add-topic session-search --add-topic conversation-history
+npm publish          # 需要先 npm login；bundle 只含 16 个文件、约 46KB
+```
+
+`package.json` 里的 `engines.dsh` 已经写好，插件列表的名称和描述来自 `locale/*.json` 的 `meta`。
+
 ## License
 
 MIT
