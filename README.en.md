@@ -25,8 +25,8 @@ CJK-friendly, millisecond-fast, zero dependencies, no full-text index service re
 | --- | --- | --- | --- | --- |
 | Entry point | Header icon + inline sidebar panel | Sidebar panel + `Ctrl+F` | History field and in-conversation find, part of a suite | No UI, 3 agent tools |
 | What it searches | Your input (answers optional) | Only the last completed answer of each session | Requires the built-in full-text index | The model calls tools |
-| Per query (median of 5) | **0.7ms** (0.4–13ms) | 12.6 s | errors out after install, no results | — |
-| Time to first use | auto build in background, ~4.7s | first successful result 14.5 s | — | — |
+| Per query (median of 5) | **0.7ms** (0.4–13ms) | 12.6 s | search errors out, no usable result | cannot be installed, no UI |
+| Time to first use | auto build in background, ~4.7s | first successful result 14.5 s | search never succeeds | rejected by the version gate |
 | CJK substrings | substring scan + 2-char fallback | engine tokenizer | engine tokenizer | engine tokenizer |
 | Dependencies | zero, no build | — | needs the built-in FTS enabled by hand; still incompatible on rc.4 | install rejected by the version gate |
 
