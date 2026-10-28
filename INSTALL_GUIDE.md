@@ -48,11 +48,13 @@ The printed URL is the one to open. `--no-open` keeps the browser closed; drop i
 
 ## 3. Verify
 
-Fast automated check — the plugin exposes one HTTP route, which is authenticated by the browser cookie, so the simplest programmatic probe is the sidecar index directory:
+Fast automated check — the sidecar index is built automatically a few seconds after the Host half loads (no search needed):
 
 ```bash
-ls ~/.dsh/cache/session-history-search/sessions 2>/dev/null | wc -l   # expect > 0 after the first search
+sleep 6; ls ~/.dsh/cache/session-history-search/sessions 2>/dev/null | wc -l   # expect one file per unarchived session, > 0
 ```
+
+The token for the Web UI is printed on stdout (`dsh web: http://127.0.0.1:<port>/?token=…`); DSH 0.2.1-rc.x does not write a `web.log`.
 
 Human-visible checklist (open the URL from step 2):
 
@@ -62,7 +64,7 @@ Human-visible checklist (open the URL from step 2):
 4. Hover a row → a preview popup shows the matched message with the keyword highlighted.
 5. Click a row → that session opens in the conversation pane.
 6. `Esc` closes the panel; reopen it and the previous query is still there.
-7. Settings → Plugins: the entry **Session History Search / 会话历史搜索** is listed and can be toggled off/on (the badge/icon comes from `locale/*.json` + `icon.svg`).
+7. Sidebar **插件 / Plugins** page → “已安装插件 / Installed plugins”: the entry **会话历史搜索 / Session History Search** is listed and can be toggled off/on (display metadata comes from `locale/*.json` + `icon.svg`). Turning it off removes the icon immediately.
 
 If step 1 shows no new icon, the client half did not load: check the browser console for errors mentioning `dsh-session-history-search`, and confirm the profile entry exists:
 

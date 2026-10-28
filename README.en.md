@@ -37,7 +37,7 @@ dsh plugin --profile web add github:OWNER/dsh-session-history-search
 dsh plugin --profile web add /path/to/dsh-session-history-search
 ```
 
-Restart `dsh web` (or reload the page), then enable/disable it under **Settings → Plugins**. A plain-JS package, so git installs need no `allowBuilds` permission.
+Restart `dsh web` (or reload the page). The entry **Session History Search** shows up under the sidebar **Plugins** page (“installed plugins”) and can be toggled anytime. A plain-JS package, so git installs need no `allowBuilds` permission.
 
 Prefer to let an agent do it:
 
@@ -67,7 +67,7 @@ Measured on 134 sessions (193MB compressed, 818MB decompressed):
 
 | Task | Result |
 | --- | --- |
-| Cold build (first install) | ~2.1s, parent RSS < 100MB |
+| Cold build (first install) | 137 sessions / 192MB in ~4.7s; starts 0.3s after the Host loads and searches see partial results meanwhile; first UI rows ~2.4s after process start |
 | Second start (sidecars present) | no rebuild, ~3ms |
 | One session grew | decompress only new frames, ~4ms |
 | Single search (titles included) | 2–15ms |

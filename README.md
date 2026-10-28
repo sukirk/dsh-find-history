@@ -24,9 +24,9 @@
 
 ## 安装
 
-三种方式任选，装完重启 `dsh web`（或刷新页面），在 **设置 → 插件** 里能看到「会话历史搜索 / Session History Search」，并可以随时启停。
+三种方式任选，装完重启 `dsh web`（或刷新页面）。侧栏的 **插件** 页 → 「已安装插件」里能看到「会话历史搜索」（英文界面下是 Session History Search），可以随时启停。
 
-**1) npm（发布到 npm 后）**
+**1) npm（发布到 npm 后；目前还没发布，先用下面两种）**
 
 ```bash
 dsh plugin --profile web add dsh-session-history-search
@@ -78,7 +78,7 @@ DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.j
 
 | 项目 | 结果 |
 | --- | --- |
-| 冷建（首次安装） | 约 2.1 秒，父进程 RSS < 100MB |
+| 冷建（首次安装） | 137 个会话 / 192MB 约 4.7 秒建完；Host 启动 0.3 秒后自动开始，边建边可搜，页面第一次出结果约 2.4 秒 |
 | 再次启动（有侧车） | 不重建，读侧车约 3ms |
 | 某会话日志变大 | 只解新增帧，约 4ms |
 | 单次搜索（含标题、工作区） | 2–15ms |
