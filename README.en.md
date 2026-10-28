@@ -19,18 +19,17 @@ CJK-friendly, millisecond-fast, zero dependencies, no full-text index service re
 - **Background index build**: the first install backfills in child processes (≈12MB batches, at most 2 workers), so the host stays small and search works while it runs.
 - **Reversible**: only writes sidecar files under `~/.dsh/cache/`; delete the directory to forget everything.
 
-### Measured on the same machine (DSH 0.2.1-rc.4, 137 sessions / 192MB logs)
+### Measured on the same machine (DSH 0.2.1-rc.4, 137–141 sessions / 192MB logs)
 
-| | **this plugin** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) 0.1.1 | [dsh-companion](https://github.com/beijingwahw/dsh-companion) 0.4.0 | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) 0.2.0 |
+| | **this plugin** | [Victue/dsh-session-search](https://github.com/Victue/dsh-session-search) 0.3.2 | [YeqingTang/dsh-session-flow](https://github.com/YeqingTang/dsh-session-flow) 1.5.0 | [Ziminli/dsh-session-search](https://github.com/Ziminli/dsh-session-search) 0.1.1 |
 | --- | --- | --- | --- | --- |
-| Entry point | Header icon + inline sidebar panel | Sidebar panel + `Ctrl+F` | History field and in-conversation find, part of a suite | No UI, 3 agent tools |
-| What it searches | Your input (answers optional) | Only the last completed answer of each session | Requires the built-in full-text index | The model calls tools |
-| Per query (median of 5) | **0.7ms** (0.4–13ms) | 12.6 s | search errors out, no usable result | cannot be installed, no UI |
-| Time to first use | auto build in background, ~4.7s | first successful result 14.5 s | search never succeeds | rejected by the version gate |
-| CJK substrings | substring scan + 2-char fallback | engine tokenizer | engine tokenizer | engine tokenizer |
-| Dependencies | zero, no build | — | needs the built-in FTS enabled by hand; still incompatible on rc.4 | install rejected by the version gate |
+| Entry point | Header icon in the Workspace row + inline results | Sidebar panel | "Session flow" workbench + a search field | Sidebar panel + `Ctrl+F` |
+| What it searches | What you typed (answers optional) | All message bodies (user, assistant, tool) | User + assistant + thinking + tools, **newest 20 sessions only** | Only the last completed answer of each session |
+| Per query (median of 5) | **0.7ms** (0.4–2.8ms) | 22–36ms | 33–38ms | **12.6s** |
+| Time to first use | background build: first hits ~2s, done in 4.7s | index build 5.7s (141 sessions, 81k records) | first query 2.9–3.8s; full index 7.2s | first successful result 14.5s |
+| CJK substrings | substring scan + 2-char fallback | substring | substring | engine tokenizer |
 
-Hit counts are not directly comparable (this plugin defaults to user input, dsh-session-search to final assistant answers); latency is. The competitors cover more ground (fuzzy matching, typo tolerance, time ranges); this plugin deliberately does one thing — fast recall of what you wrote.
+Scope notes: Victue keeps its own full-corpus index and answers from it; dsh-session-flow rescans only the 20 most recently modified sessions within a 5s budget, so older sessions are missed; Ziminli indexes just the last completed answer, so a user-text query like 部署脚本 returns nothing. Hit counts are not comparable across plugins; latency is. The competitors cover more ground (fuzzy matching, typo tolerance, time ranges); this plugin deliberately does one thing — fast recall of what you wrote.
 
 ## Install
 
