@@ -14,7 +14,7 @@ Workspaces                [🔍]  ← new entry point
 │ 22 conversations                │
 │  Session history search plugin  │
 │  ...does "optimize" highlight?  │
-│  [drlong] 2 minutes ago         │
+│  [admin] 2 minutes ago         │
 └─────────────────────────────────┘
 ```
 
