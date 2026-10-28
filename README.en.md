@@ -4,6 +4,8 @@ Adds a search icon to the Workspaces header in the DSH Web sidebar. Type a few w
 
 CJK-friendly, millisecond-fast, zero dependencies, no full-text index service required.
 
+![preview](docs/preview.png)
+
 > 中文说明见 [README.md](README.md)
 
 ```
