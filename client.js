@@ -638,7 +638,7 @@ window.__ModuleLoader__.load({
 				 * @param {object} own - matcher switches.
 				 * @param {number} stage - rows to skip.
 				 */
-				const runSearch = async (needle, pools, own, stage) => {
+				const runSearch = async (needle, pools, own, stage, quiet = false) => {
 					clearHighlight();
 					const queryString = buildQuery(needle, pools, own, stage);
 					if (stage === 0) {
@@ -654,7 +654,7 @@ window.__ModuleLoader__.load({
 					abortRef.current?.abort();
 					const controller = new AbortController();
 					abortRef.current = controller;
-					if (stage === 0) setStatus("loading");
+					if (stage === 0 && !quiet) setStatus("loading");
 					setMore(stage > 0);
 					setError(null);
 					try {
@@ -744,7 +744,7 @@ window.__ModuleLoader__.load({
 					if (result.query === "") return undefined;
 					const timer = setTimeout(() => {
 						answersRef.current.clear();
-						void runSearch(result.query, fields, matchers, 0);
+						void runSearch(result.query, fields, matchers, 0, true);
 					}, PENDING_POLL_MS);
 					return () => clearTimeout(timer);
 				}, [open, status, result.pending, result.query, fields, matchers, shape]);
