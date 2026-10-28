@@ -53,13 +53,13 @@ export function indexPaths(ctx) {
 /**
  * Rename the cache directory of the previous plugin name, so an existing index
  * is reused instead of rebuilt.
- * @param {(name: string) => string} cachePath - resolves a cache entry.
+ * @param {string} cacheDir - Harness cache directory.
  * @param {string} root - current cache directory.
  */
-function migratePreviousCache(cachePath, root) {
+function migratePreviousCache(cacheDir, root) {
   try {
     if (existsSync(root)) return
-    const previous = cachePath(PREVIOUS_CACHE_DIR)
+    const previous = join(cacheDir, PREVIOUS_CACHE_DIR)
     if (!existsSync(previous)) return
     renameSync(previous, root)
   } catch {

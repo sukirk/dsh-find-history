@@ -141,7 +141,7 @@ window.__ModuleLoader__.load({
 		// --------------------------------------------------------------- locale
 
 		const zh = {
-			trigger: "搜索会话历史",
+			trigger: "查找历史",
 			dialogTitle: "查找历史",
 			placeholder: "搜索对话内容",
 			hint: "搜索你在任意工作区输入过的内容，找回那个会话继续聊。",
