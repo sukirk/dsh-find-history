@@ -56,7 +56,7 @@ Prefer to let an agent do it:
 ## Usage
 
 - Click the new icon in the Workspaces header (magnifier with a clock hand, distinct from the built-in title search).
-- Type to search (250ms debounce). Multiple keywords must all appear in the same message; long CJK strings fall back to 2-char chunks.
+- Type to search (260ms debounce). Multiple keywords must all appear in the same message; long CJK strings fall back to 2-char chunks.
 - Inline toggles: `Aa` case-sensitive, `ab` whole word, `.*` regex.
 - Second row: `Search: ☐ input ☐ output`; on the right, workspace multi-select, group-by-session, and sort (time / relevance).
 - Hover a row for a preview of the matched message (100 chars before + match + 100 after, highlighted).
