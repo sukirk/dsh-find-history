@@ -14,20 +14,12 @@ The commands below write `dsh`; substitute whichever form you have.
 
 ## 1. Install the plugin
 
-Pick one source:
-
 ```bash
-# from GitHub source (recommended until published on npm)
+# from GitHub source
 dsh plugin --profile web add github:OWNER/dsh-session-history-search
 
-# from a local checkout
+# from a local checkout (development)
 dsh plugin --profile web add /path/to/dsh-session-history-search
-
-# from a tarball
-dsh plugin --profile web add ./dsh-session-history-search-1.0.0.tgz
-
-# from npm (after publish)
-dsh plugin --profile web add dsh-session-history-search
 ```
 
 Rules of thumb:

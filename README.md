@@ -6,52 +6,47 @@
 
 ![预览](docs/preview.png)
 
-## 和另外三个 dsh 搜索插件比
+## 优点
 
-| | **本插件** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) | [dsh-companion](https://github.com/beijingwahw/dsh-companion) |
+- **就在侧栏里搜**：入口是「工作区」标题行的一个图标，结果直接铺在侧栏，不弹独立浮窗，也不打断当前对话。
+- **只找你说过的话**：默认只搜你自己输入的内容；需要翻回答时勾一下「输出」，不会把 Harness 注入的上下文、技能目录当成你的话搜出来。
+- **中文连写能搜到**：`炒股界面` 能命中「炒股界面与K线缩放」，长串搜不到时按两字切块兜底。
+- **毫秒级**：同一台机器、同一份数据，单次搜索 0.4–13ms（5 次中位 0.7ms）。
+- **不需要索引服务**：不依赖 DSH 的 `session-query`，也不用开 FTS，装完就能用。
+- **零依赖、无构建**：5 个 JS 文件，`dsh plugin add` 直接装，不跑构建脚本，不需要 `allowBuilds`。
+- **建库不卡页面**：首次安装后台用子进程回填（每批 12MB、最多 2 个 worker），父进程内存不涨，边建边能搜。
+- **改动可逆**：只往 `~/.dsh/cache/` 写一份侧车索引，卸载后删掉目录即可。
+
+### 同机实测（DSH 0.2.1-rc.4，137 个会话 / 192MB 日志）
+
+| | **本插件** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) 0.1.1 | [dsh-companion](https://github.com/beijingwahw/dsh-companion) 0.4.0 | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) 0.2.0 |
 | --- | --- | --- | --- | --- |
-| 入口形态 | 侧栏标题行图标 + **内联面板**（不弹独立浮窗） | 侧栏面板 + Ctrl+F | 无界面，3 个 agent 工具 | 套件里的一块：历史列表搜索框 + 对话内查找 |
-| 面向谁 | 人：找回忘记的会话 | 人 | 模型 | 人 |
-| 数据来源 | **直接读会话日志**（zstd 帧级增量 + 每会话侧车） | DSH `session-query` / controller 服务 | `sessionQuery` FTS5，索引没开时回退扫描 | `sessionQuery` |
-| 需要全文索引服务 | **不需要** | 需要部署启用 | 需要（否则退化） | 需要 |
-| 中文连写 | **子串扫描 + 两字切块兜底**（"炒股界面"能搜到"炒股界面与K线缩放"） | 依赖引擎分词 | 依赖引擎分词 | 依赖引擎分词 |
-| 输入 / 输出分池 | **默认只搜你输入的，可勾选把回答也搜进来** | 有 final-only 选项 | 工具参数 | 部分 |
-| 首次建索引 | **约 2 秒**（子进程回填，父进程 RSS < 100MB） | 取决于引擎 | 取决于引擎 / 扫描 | 取决于引擎 |
-| 单次搜索延迟 | **2–15ms**（同机同数据实测） | 同机实测其搜索接口 3.5–4s | 未测（无界面） | 未测 |
-| 体积与依赖 | **5 个 JS 文件，无第三方依赖，无构建步骤** | 中等 | 小 | 大（四模块套件） |
+| 入口 | 侧栏标题行图标 + 内联面板 | 侧栏面板 + `Ctrl+F` | 套件里的历史搜索框、对话内查找 | 无界面，3 个 agent 工具 |
+| 搜什么 | 你输入的内容（可加搜回答） | 只搜每条会话最后一条已完成回答 | 依赖 DSH 内置全文索引 | 由模型调工具 |
+| 单次搜索（5 次中位） | **0.7ms**（0.4–13ms） | 12.6 秒 | 装上后检索报错，无结果 | — |
+| 首次可用 | 后台自动建库，约 4.7 秒建完 | 首次成功 14.5 秒 | — | — |
+| 中文连写 | 子串扫描 + 两字切块兜底 | 依赖引擎分词 | 依赖引擎分词 | 依赖引擎分词 |
+| 依赖 | 零依赖、无构建 | — | 需先手动启用内置 FTS，rc.4 下仍不兼容 | 安装被版本门禁拒绝 |
 
-说明：上表的对手数字来自本机同一份数据（134 个会话 / 774 条用户输入 / 751 条回答）的实测，仅供参考；对手插件在功能广度上更强（模糊匹配、错字容忍、时间范围、多会话选择、agent 工具），本插件刻意只做"快速找回"这一件事。
+计数口径不同（本插件默认只搜用户输入，dsh-session-search 只搜助手最终回答），延迟可比，命中数不可直接横比。竞品在功能广度上更全（模糊匹配、错字容忍、时间范围），本插件刻意只做「快速找回自己说过的话」这一件事。
 
 ## 安装
 
-三种方式任选，装完重启 `dsh web`（或刷新页面）。侧栏的 **插件** 页 → 「已安装插件」里能看到「会话历史搜索」（英文界面下是 Session History Search），可以随时启停。
+装完刷新页面（或重启 `dsh web`）。侧栏「插件」页的已安装列表里能看到「会话历史搜索」，可以随时停用。
 
-**1) npm（发布到 npm 后；目前还没发布，先用下面两种）**
-
-```bash
-dsh plugin --profile web add dsh-session-history-search
-```
-
-**2) 从 GitHub 源码装**
+**1) 从 GitHub 源码安装**
 
 ```bash
 dsh plugin --profile web add github:OWNER/dsh-session-history-search
 ```
 
-**3) 本地目录或 tarball**
-
-```bash
-dsh plugin --profile web add /path/to/dsh-session-history-search
-dsh plugin --profile web add ./dsh-session-history-search-1.0.0.tgz
-```
-
-**4) 让 AI 助手帮你装**
+**2) 让 AI 助手帮你装**
 
 把这句话发给任意能执行命令的 agent：
 
 > 根据 `OWNER/dsh-session-history-search` 仓库里的 INSTALL_GUIDE.md 安装并验证这个插件。
 
-`dsh plugin add` 会把包名直接转给 pnpm 装进 profile，并把 bundle 加进 profile 的 `dsh.profile.bundles`；本插件是纯 JS、没有构建步骤，git 安装不需要额外授权 `allowBuilds`。
+`dsh plugin add` 把包名直接转给 pnpm 装进 profile，并把 bundle 加进 `dsh.profile.bundles`。本插件是纯 JS、没有构建步骤，git 安装不需要额外授权 `allowBuilds`。
 
 ## 怎么用
 
@@ -60,6 +55,8 @@ dsh plugin --profile web add ./dsh-session-history-search-1.0.0.tgz
 - 输入框内三个开关：`Aa` 区分大小写、`ab` 整词、`.*` 正则。
 - 第二行「搜索：☐ 输入 ☐ 输出」控制搜哪一池；右侧三个图标：工作区多选（文件夹）、按会话分组（列表）、排序（时间 / 相关性）。
 - 鼠标停在结果行上会弹出命中消息的预览（命中处前 100 字 + 命中段 + 后 100 字，关键词高亮）。
+
+![悬停预览](docs/preview-hover.png)
 - 点结果行即打开那个会话并继续对话；归档会话不会被搜到。
 - `Esc` 先收起下拉/面板，再按一次关闭搜索；关键词会留在输入框里，下次打开自动重搜。
 
@@ -81,15 +78,9 @@ DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.j
 | 冷建（首次安装） | 137 个会话 / 192MB 约 4.7 秒建完；Host 启动 0.3 秒后自动开始，边建边可搜，页面第一次出结果约 2.4 秒 |
 | 再次启动（有侧车） | 不重建，读侧车约 3ms |
 | 某会话日志变大 | 只解新增帧，约 4ms |
-| 单次搜索（含标题、工作区） | 2–15ms |
+| 单次搜索（含标题、工作区） | 0.4–13ms，5 次中位 0.7ms |
 | 内存语料扫描 | 751 条约 0.13ms；10 万条约 46ms |
 | 磁盘占用 | 侧车索引约 2.5MB（不复制日志正文） |
-
-### 为什么不用 FTS / 不用 ripgrep
-
-- DSH 自带的 `session-query` 用 SQLite FTS5 的 `unicode61` 分词：连续中文会被当成**一整个 token**，两个汉字的子串基本搜不到；而且它索引的是**全部 `user/message` 事件**，Harness 注入的运行时上下文、技能目录、时间戳也会被索引，搜出来的"会话"点进去常常一个字都对不上。
-- `ripgrep` 扫已解压文本很快（782MB 约 79ms），但会话日志是压缩的：让 rg 直接扫 zstd 需要每次解压（1.18s），先解压成镜像又要多占一份磁盘。129 个文件的进程启动开销也不划算——常驻内存的 0.13ms 比它快两个数量级。
-- 顺带记录一个坑：Node 22 的 `zlib.zstdDecompressSync` / `createZstdDecompress` **只解第一帧**，14MB 的日志只吐出 198 字节且不报错。所以这里自己按帧走。
 
 ## 隐私
 
@@ -126,7 +117,6 @@ icon.svg         插件列表图标
 gh repo create OWNER/dsh-session-history-search --public --source=. --push \
   --description "DSH 侧栏内联的会话历史搜索：按你输入过的内容找回忘记的会话（中文友好、毫秒级、零依赖）"
 gh repo edit --add-topic dsh-plugin --add-topic dsh --add-topic session-search --add-topic conversation-history
-npm publish          # 需要先 npm login；bundle 只含 16 个文件、约 46KB
 ```
 
 `package.json` 里的 `engines.dsh` 已经写好，插件列表的名称和描述来自 `locale/*.json` 的 `meta`。

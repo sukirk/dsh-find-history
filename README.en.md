@@ -8,36 +8,39 @@ CJK-friendly, millisecond-fast, zero dependencies, no full-text index service re
 
 > 中文说明见 [README.md](README.md)
 
-## How it compares
+## Highlights
 
-| | **this plugin** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) | [dsh-companion](https://github.com/beijingwahw/dsh-companion) |
+- **Search where you already are**: the entry sits in the Workspaces header and results render inside the sidebar — no floating window, no context switch.
+- **Finds what you typed, not what the harness injected**: input is the default pool; tick Output when you want to search answers too. Runtime context and skill catalogs never show up as "your words".
+- **CJK works**: `炒股界面` matches 「炒股界面与K线缩放」; long runs with no hit fall back to 2-character chunks.
+- **Milliseconds**: 0.4–13ms per query on the same machine and dataset (median 0.7ms over 5 runs).
+- **No index service**: does not depend on DSH `session-query` and needs no FTS — it works right after install.
+- **Zero dependencies, no build step**: 5 JS files, installed straight through `dsh plugin add`, no `allowBuilds` prompt.
+- **Background index build**: the first install backfills in child processes (≈12MB batches, at most 2 workers), so the host stays small and search works while it runs.
+- **Reversible**: only writes sidecar files under `~/.dsh/cache/`; delete the directory to forget everything.
+
+### Measured on the same machine (DSH 0.2.1-rc.4, 137 sessions / 192MB logs)
+
+| | **this plugin** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) 0.1.1 | [dsh-companion](https://github.com/beijingwahw/dsh-companion) 0.4.0 | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) 0.2.0 |
 | --- | --- | --- | --- | --- |
-| Entry point | Header icon + **inline panel in the sidebar** | Sidebar panel + Ctrl+F | No UI, 3 agent tools | One module of a suite |
-| Audience | Humans finding old sessions | Humans | The model | Humans |
-| Data source | **Reads session logs directly** (zstd frame-level deltas + per-session sidecar) | DSH `session-query` services | `sessionQuery` FTS5, falls back to scanning | `sessionQuery` |
-| Needs a full-text index service | **No** | Yes | Yes (else degraded) | Yes |
-| CJK substring search | **Substring scan + 2-char chunk fallback** | Engine tokenizer | Engine tokenizer | Engine tokenizer |
-| Input / output pools | **Input by default, output optional** | final-only option | tool args | partial |
-| First index build | **~2s** (child-process backfill, parent RSS < 100MB) | engine-dependent | engine-dependent | engine-dependent |
-| Per-query latency | **2–15 ms** (measured) | 3.5–4 s on the same machine | not measured | not measured |
-| Dependencies | **5 JS files, no deps, no build step** | medium | small | large suite |
+| Entry point | Header icon + inline sidebar panel | Sidebar panel + `Ctrl+F` | History field and in-conversation find, part of a suite | No UI, 3 agent tools |
+| What it searches | Your input (answers optional) | Only the last completed answer of each session | Requires the built-in full-text index | The model calls tools |
+| Per query (median of 5) | **0.7ms** (0.4–13ms) | 12.6 s | errors out after install, no results | — |
+| Time to first use | auto build in background, ~4.7s | first successful result 14.5 s | — | — |
+| CJK substrings | substring scan + 2-char fallback | engine tokenizer | engine tokenizer | engine tokenizer |
+| Dependencies | zero, no build | — | needs the built-in FTS enabled by hand; still incompatible on rc.4 | install rejected by the version gate |
 
-The competitor numbers come from the same local dataset (134 sessions / 774 user inputs / 751 answers) and are indicative only. The competitors are stronger in breadth (fuzzy matching, typo tolerance, time ranges, multi-session selection, agent tools); this plugin deliberately does one thing — fast recall.
+Hit counts are not directly comparable (this plugin defaults to user input, dsh-session-search to final assistant answers); latency is. The competitors cover more ground (fuzzy matching, typo tolerance, time ranges); this plugin deliberately does one thing — fast recall of what you wrote.
 
 ## Install
 
+From the GitHub source:
+
 ```bash
-# from npm (once published)
-dsh plugin --profile web add dsh-session-history-search
-
-# from source
 dsh plugin --profile web add github:OWNER/dsh-session-history-search
-
-# from a local checkout or tarball
-dsh plugin --profile web add /path/to/dsh-session-history-search
 ```
 
-Restart `dsh web` (or reload the page). The entry **Session History Search** shows up under the sidebar **Plugins** page (“installed plugins”) and can be toggled anytime. A plain-JS package, so git installs need no `allowBuilds` permission.
+Reload the page (or restart `dsh web`). The entry **Session History Search** appears in the sidebar **Plugins** page and can be toggled anytime. The package is plain JS with no build step, so git installs need no `allowBuilds` permission.
 
 Prefer to let an agent do it:
 
@@ -50,6 +53,8 @@ Prefer to let an agent do it:
 - Inline toggles: `Aa` case-sensitive, `ab` whole word, `.*` regex.
 - Second row: `Search: ☐ input ☐ output`; on the right, workspace multi-select, group-by-session, and sort (time / relevance).
 - Hover a row for a preview of the matched message (100 chars before + match + 100 after, highlighted).
+
+![Hover preview](docs/preview-hover.png)
 - Click a row to open that session; archived sessions are excluded. `Esc` closes, and your query is kept for next time.
 
 ## Why it is fast
@@ -70,15 +75,9 @@ Measured on 134 sessions (193MB compressed, 818MB decompressed):
 | Cold build (first install) | 137 sessions / 192MB in ~4.7s; starts 0.3s after the Host loads and searches see partial results meanwhile; first UI rows ~2.4s after process start |
 | Second start (sidecars present) | no rebuild, ~3ms |
 | One session grew | decompress only new frames, ~4ms |
-| Single search (titles included) | 2–15ms |
+| Single search (titles included) | 0.4–13ms, median 0.7ms |
 | In-memory scan | 0.13ms for 751 messages, 46ms for 100k |
 | Disk | ~2.5MB of sidecars |
-
-### Why not FTS, why not ripgrep
-
-DSH's `session-query` uses SQLite FTS5 with `unicode61`: consecutive CJK becomes a single token, so 2-character Chinese substrings rarely match. It also indexes **every** `user/message` event, including Harness-injected runtime context and skill catalogs, so many "hits" contain none of your words. `ripgrep` is great on plain text (782MB in ~79ms) but session logs are compressed — scanning them costs a decompression per query (1.18s), and keeping a decompressed mirror costs disk. An in-memory scan is two orders of magnitude faster.
-
-Note: Node 22's `zlib.zstdDecompressSync` / `createZstdDecompress` only decode the **first frame** (198 bytes out of a 14MB log, silently). Hence the manual frame walking.
 
 ## Privacy
 
