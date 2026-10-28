@@ -6,18 +6,6 @@
 
 ![预览](docs/preview.png)
 
-```
-工作区                    [🔍]  ← 新增的入口
-┌─────────────────────────────────┐
-│ 🔍 搜索对话内容      Aa ab .* ✕ │
-│ 搜索：☑ 输入 ☐ 输出    ▤  ▥  ⇅ │
-│ 找到 22 个会话                  │
-│  会话历史搜索插件开发           │
-│  那这个呢？"优化"也没有高亮      │
-│  [admin] 2 分钟前              │
-└─────────────────────────────────┘
-```
-
 ## 和另外三个 dsh 搜索插件比
 
 | | **本插件** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) | [dsh-companion](https://github.com/beijingwahw/dsh-companion) |

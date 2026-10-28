@@ -8,18 +8,6 @@ CJK-friendly, millisecond-fast, zero dependencies, no full-text index service re
 
 > 中文说明见 [README.md](README.md)
 
-```
-Workspaces                [🔍]  ← new entry point
-┌─────────────────────────────────┐
-│ 🔍 Search conversation  Aa ab .* ✕ │
-│ Search: ☑ input ☐ output  ▤ ▥ ⇅ │
-│ 22 conversations                │
-│  Session history search plugin  │
-│  ...does "optimize" highlight?  │
-│  [admin] 2 minutes ago         │
-└─────────────────────────────────┘
-```
-
 ## How it compares
 
 | | **this plugin** | [dsh-session-search](https://github.com/Ziminli/dsh-session-search) | [dsh-session-search-pro](https://github.com/LeslieWylie/dsh-session-search-pro) | [dsh-companion](https://github.com/beijingwahw/dsh-companion) |
