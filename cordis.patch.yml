@@ -1,0 +1,9 @@
+# dsh-session-history-search：会话历史搜索（Client 装饰 + Host 搜索路由）。
+#
+# The plugin keeps no full-text index: it reads the Session logs once into a
+# corpus of the messages the user typed, matches substrings in memory, and grows
+# that corpus from the append feed. It therefore neither needs nor changes the
+# deployment's `sessionQuery` row.
+- insert:
+    - id: session-history-search
+      name: dsh-session-history-search

@@ -1,0 +1,51 @@
+{
+  "name": "dsh-session-history-search",
+  "version": "1.0.0",
+  "description": "DSH Web plugin: an inline search box in the sidebar Workspaces header that finds a forgotten conversation by the words you typed in it, across every workspace.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "session-search",
+    "conversation-history",
+    "web-ui"
+  ],
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.1 <0.3.0"
+  },
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.mjs",
+    "scan.mjs",
+    "store.mjs",
+    "backfill.mjs",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "INSTALL_GUIDE.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}
