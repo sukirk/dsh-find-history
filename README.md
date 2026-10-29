@@ -62,48 +62,11 @@ dsh plugin --profile web add github:OWNER/dsh-find-history
 
 ### 一次搜索发生了什么
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant U as 你
-  participant UI as 侧栏面板
-  participant H as Host 路由
-  participant M as 内存语料
-  U->>UI: 输入「优化」
-  UI->>H: GET /dsh-find-history/search?q=优化
-  H->>M: 子串匹配（输入池，默认）
-  M-->>H: 命中的会话 + 片段位置
-  H-->>UI: JSON（标题、工作区、命中处上下文）
-  UI-->>U: 侧栏结果列表（关键词高亮）
-  U->>UI: 点结果行
-  UI->>U: 打开那个会话继续聊
-```
+![从敲下关键词到打开会话的 8 个步骤](docs/sequence.png)
 
 ### 数据怎么流
 
-```mermaid
-flowchart LR
-  subgraph 磁盘
-    LOG["session.v4.jsonl.zstd<br/>多帧 zstd 日志"]
-    DOC[("侧车索引<br/>~/.dsh/cache/find-history/")]
-  end
-  subgraph Host
-    SCAN["scan.mjs<br/>帧头定位 + 行预筛"]
-    STORE["store.mjs<br/>增量续读"]
-    MATCH["内存子串匹配<br/>输入池 / 输出池"]
-    ROUTE["GET /dsh-find-history/search"]
-  end
-  subgraph Client
-    UI["侧栏内联面板<br/>结果 · 分组 · 悬停预览"]
-  end
-  LOG -->|首发安装，子进程分批回填| SCAN
-  SCAN --> STORE
-  STORE --> DOC
-  LOG -.->|日志变大，只解尾部新增帧| STORE
-  DOC --> MATCH
-  MATCH --> ROUTE --> UI
-  UI -->|点结果行| OPEN["打开那个会话继续聊"]
-```
+![日志 → 侧车索引 → 内存匹配 → 侧栏面板](docs/flow.png)
 
 DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd`——**多帧 zstd**拼接。本插件不去解压整份日志，而是：
 
@@ -151,7 +114,8 @@ dsh-find-history/
 ├── client.js        Client half：侧栏图标、内联面板、结果渲染
 ├── cordis.patch.yml bundle 声明
 ├── icon.svg         插件列表图标
-└── locale/          zh / en 文案
+├── locale/          zh / en 文案
+└── docs/            README 里的截图与示意图
 ```
 
 ## 隐私
