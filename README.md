@@ -62,9 +62,9 @@ dsh plugin --profile web add github:OWNER/dsh-find-history
 <details>
 <summary><b>实现细节：为什么是毫秒级</b></summary>
 
-![日志 → 侧车索引 → 内存匹配 → 侧栏面板](docs/flow.png)
+<img src="docs/flow.png" alt="日志 → 侧车索引 → 内存匹配 → 侧栏面板" width="700">
 
-![—次搜索的 8 个步骤](docs/sequence.png)
+<img src="docs/sequence.png" alt="一次搜索的 8 个步骤" width="400">
 
 DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd`，是**多帧 zstd** 拼接，不是明文，不能直接 grep。本插件的做法：
 
