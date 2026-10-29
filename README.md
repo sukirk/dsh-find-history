@@ -36,17 +36,17 @@ DSH 侧栏已有一个搜索图标，它按会话标题匹配；本插件检索�
 
 ## 安装
 
-安装完成后刷新页面，侧栏「插件」页会出现「查找历史」，可随时停用。把下面命令里的 `OWNER` 换成仓库实际所有者。
+安装完成后刷新页面，侧栏「插件」页会出现「查找历史」，可随时停用。
 
 **从 GitHub 源码安装**
 
 ```bash
-dsh plugin --profile web add github:OWNER/dsh-find-history
+dsh plugin --profile web add github:sukirk/dsh-find-history
 ```
 
 **交由 AI 助手安装**
 
-> 根据 `OWNER/dsh-find-history` 仓库中的 INSTALL_GUIDE.md 安装并验证该插件。
+> 根据 `sukirk/dsh-find-history` 仓库中的 INSTALL_GUIDE.md 安装并验证该插件。
 
 包为纯 JS、无构建步骤，git 安装无需授权 `allowBuilds`。
 

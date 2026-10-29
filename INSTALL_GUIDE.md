@@ -16,7 +16,7 @@ The commands below write `dsh`; substitute whichever form you have.
 
 ```bash
 # from GitHub source
-dsh plugin --profile web add github:OWNER/dsh-find-history
+dsh plugin --profile web add github:sukirk/dsh-find-history
 
 # from a local checkout (development)
 dsh plugin --profile web add /path/to/dsh-find-history
