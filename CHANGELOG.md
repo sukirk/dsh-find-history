@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 — 2026-10-29
+
+- Docs: English README (`README.en.md`) with a language switch in both READMEs.
+- Docs: declare storefront screenshots in `screenshots.json`.
+- Publish a prebuilt tarball so installs can skip the build-from-source path.
 ## 1.0.0 — 2026-10-29
 
 First public release.
