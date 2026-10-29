@@ -1,0 +1,66 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#f5f7fb;}
+  svg{display:block;}
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="380" viewBox="0 0 1040 380">
+<defs>
+<filter id="soft" x="-12%" y="-30%" width="124%" height="170%">
+  <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#1b2231" flood-opacity="0.06"/>
+</filter>
+<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+  <circle cx="1.2" cy="1.2" r="1.1" fill="#dfe5f0"/>
+</pattern>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#8c96a8"/></marker><marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#3b6ef6"/></marker><marker id="aht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#0d9488"/></marker><marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#d97706"/></marker><marker id="ahv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#7c5cf0"/></marker>
+</defs>
+<rect width="1040" height="380" fill="#f5f7fb"/>
+<rect width="1040" height="380" fill="url(#dots)" opacity="0.55"/>
+<text x="40" y="50" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="18" fill="#1b2231" font-weight="600" text-anchor="start" letter-spacing="0">一次搜索的数据通路</text>
+<text x="40" y="73" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">137 个会话日志 → 3 MB 侧车索引 → 内存匹配 → 侧栏面板</text>
+<rect x="40" y="108" width="190" height="152" rx="14" fill="#ffffff" stroke="#e2e7f0" filter="url(#soft)"/>
+<rect x="40" y="122" width="3" height="124" rx="1.5" fill="#0d9488"/>
+<text x="58" y="136" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#0d9488" font-weight="600" text-anchor="start" letter-spacing="1">磁盘</text>
+<text x="58" y="164" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="16" fill="#1b2231" font-weight="600" text-anchor="start" letter-spacing="0">137 个会话日志</text>
+<text x="58" y="190" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">多帧 zstd</text>
+<text x="58" y="211" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">共 192 MB</text>
+<line x1="58" y1="222" x2="212" y2="222" stroke="#e2e7f0"/>
+<text x="58" y="244" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">不是明文，没法 grep</text>
+<rect x="300" y="108" width="190" height="152" rx="14" fill="#ffffff" stroke="#e2e7f0" filter="url(#soft)"/>
+<rect x="300" y="122" width="3" height="124" rx="1.5" fill="#3b6ef6"/>
+<text x="318" y="136" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="start" letter-spacing="1">Host</text>
+<text x="318" y="164" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="16" fill="#1b2231" font-weight="600" text-anchor="start" letter-spacing="0">scan.mjs</text>
+<text x="318" y="190" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">按帧解压</text>
+<text x="318" y="211" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">只解析命中行</text>
+<line x1="318" y1="222" x2="472" y2="222" stroke="#e2e7f0"/>
+<text x="318" y="244" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">全量 2.1s / 增量 4ms</text>
+<rect x="560" y="108" width="190" height="152" rx="14" fill="#ffffff" stroke="#e2e7f0" filter="url(#soft)"/>
+<rect x="560" y="122" width="3" height="124" rx="1.5" fill="#0d9488"/>
+<text x="578" y="136" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#0d9488" font-weight="600" text-anchor="start" letter-spacing="1">磁盘</text>
+<text x="578" y="164" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="16" fill="#1b2231" font-weight="600" text-anchor="start" letter-spacing="0">侧车索引</text>
+<text x="578" y="190" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">每会话 1 个 JSON</text>
+<text x="578" y="211" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">共 3 MB</text>
+<line x1="578" y1="222" x2="732" y2="222" stroke="#e2e7f0"/>
+<text x="578" y="244" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">只存提取出的文本</text>
+<rect x="820" y="108" width="190" height="152" rx="14" fill="#ffffff" stroke="#e2e7f0" filter="url(#soft)"/>
+<rect x="820" y="122" width="3" height="124" rx="1.5" fill="#3b6ef6"/>
+<text x="838" y="136" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="start" letter-spacing="1">Host</text>
+<text x="838" y="164" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="16" fill="#1b2231" font-weight="600" text-anchor="start" letter-spacing="0">内存匹配</text>
+<text x="838" y="190" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">子串匹配 + 排序</text>
+<text x="838" y="211" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">全命中优先</text>
+<line x1="838" y1="222" x2="992" y2="222" stroke="#e2e7f0"/>
+<text x="838" y="244" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">0.4–0.8ms / 次</text>
+<path d="M240,184 L290,184" fill="none" stroke="#aab3c4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ah)"/>
+<text x="265.0" y="172" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="middle" letter-spacing="0">逐帧解码</text>
+<path d="M500,184 L550,184" fill="none" stroke="#aab3c4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ah)"/>
+<text x="525.0" y="172" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="middle" letter-spacing="0">写入文本</text>
+<path d="M760,184 L810,184" fill="none" stroke="#aab3c4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ah)"/>
+<text x="785.0" y="172" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="middle" letter-spacing="0">读进内存</text>
+<rect x="800" y="300" width="220" height="58" rx="12" fill="#eaf0ff" stroke="#cddaff"/>
+<text x="816" y="324" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13" fill="#3b6ef6" font-weight="600" text-anchor="start" letter-spacing="0">侧栏面板</text>
+<text x="816" y="344" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#5b6577" font-weight="400" text-anchor="start" letter-spacing="0">GET /search → JSON</text>
+<path d="M910,260 L910,294" fill="none" stroke="#3b6ef6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#ahb)"/>
+<path d="M655,260 L655,280 L395,280 L395,268" fill="none" stroke="#0d9488" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 5" marker-end="url(#aht)"/>
+<text x="525" y="304" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#0d9488" font-weight="400" text-anchor="middle" letter-spacing="0">后台增量：尾部续读 + 子进程分批回填（≤2 worker）</text>
+<text x="40" y="308" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">冷启动：stat 134 个日志 + 读 137 个侧车 ≈ 3ms</text>
+<text x="40" y="328" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">之后的查询不碰日志，也不重建索引</text>
+</svg></body></html>

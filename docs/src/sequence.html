@@ -1,0 +1,69 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#f5f7fb;}
+  svg{display:block;}
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="580" viewBox="0 0 620 580">
+<defs>
+<filter id="soft" x="-12%" y="-30%" width="124%" height="170%">
+  <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#1b2231" flood-opacity="0.06"/>
+</filter>
+<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+  <circle cx="1.2" cy="1.2" r="1.1" fill="#dfe5f0"/>
+</pattern>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#8c96a8"/></marker><marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#3b6ef6"/></marker><marker id="aht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#0d9488"/></marker><marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#d97706"/></marker><marker id="ahv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#7c5cf0"/></marker>
+</defs>
+<rect width="620" height="580" fill="#f5f7fb"/>
+<rect width="620" height="580" fill="url(#dots)" opacity="0.55"/>
+<text x="40" y="50" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="18" fill="#1b2231" font-weight="600" text-anchor="start" letter-spacing="0">一次搜索发生了什么</text>
+<text x="40" y="73" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="12.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">从敲下「优化」到会话打开，8 步；括号里是本机实测</text>
+<line x1="64" y1="114" x2="64" y2="546" stroke="#e2e7f0" stroke-width="1.6"/>
+<circle cx="64" cy="132" r="11.5" fill="#fff" stroke="#3b6ef6" stroke-width="1.4"/>
+<text x="64" y="136" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">1</text>
+<rect x="90" y="121" width="46" height="22" rx="11" fill="#eaf0ff"/>
+<text x="113" y="136" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">面板</text>
+<text x="152" y="137" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">敲下关键词，260ms 后发请求</text>
+<text x="152" y="156" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">GET /search?q=优化&amp;fields=…&amp;sort=…</text>
+<circle cx="64" cy="188" r="11.5" fill="#fff" stroke="#7c5cf0" stroke-width="1.4"/>
+<text x="64" y="192" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">2</text>
+<rect x="90" y="177" width="46" height="22" rx="11" fill="#efeafe"/>
+<text x="113" y="192" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">Host</text>
+<text x="152" y="193" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">构建匹配器</text>
+<text x="152" y="212" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">区分大小写 / 整词 / 正则三个开关，工作区与分组也在这里</text>
+<circle cx="64" cy="244" r="11.5" fill="#fff" stroke="#7c5cf0" stroke-width="1.4"/>
+<text x="64" y="248" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">3</text>
+<rect x="90" y="233" width="46" height="22" rx="11" fill="#efeafe"/>
+<text x="113" y="248" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">Host</text>
+<text x="152" y="249" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">读侧车，在内存里做子串匹配</text>
+<text x="152" y="268" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">不读日志、不重建索引（2–9ms，长查询 31ms）</text>
+<circle cx="64" cy="300" r="11.5" fill="#fff" stroke="#7c5cf0" stroke-width="1.4"/>
+<text x="64" y="304" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">4</text>
+<rect x="90" y="289" width="46" height="22" rx="11" fill="#efeafe"/>
+<text x="113" y="304" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">Host</text>
+<text x="152" y="305" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">排序、截断、补标题</text>
+<text x="152" y="324" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">时间线按时间倒序；分组模式按会话聚合，带命中数</text>
+<circle cx="64" cy="356" r="11.5" fill="#fff" stroke="#3b6ef6" stroke-width="1.4"/>
+<text x="64" y="360" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">5</text>
+<rect x="90" y="345" width="46" height="22" rx="11" fill="#eaf0ff"/>
+<text x="113" y="360" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">面板</text>
+<text x="152" y="361" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">渲染结果：片段高亮、分组、分页</text>
+<text x="152" y="380" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">每页 24 条，命中词在片段里保持可见</text>
+<circle cx="64" cy="412" r="11.5" fill="#fff" stroke="#7c5cf0" stroke-width="1.4"/>
+<text x="64" y="416" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">6</text>
+<rect x="90" y="401" width="46" height="22" rx="11" fill="#efeafe"/>
+<text x="113" y="416" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#7c5cf0" font-weight="600" text-anchor="middle" letter-spacing="0">Host</text>
+<text x="152" y="417" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">返回会话内容与命中位置</text>
+<text x="152" y="436" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">命中前 100 字 + 后 100 字，供悬停预览</text>
+<circle cx="64" cy="468" r="11.5" fill="#fff" stroke="#3b6ef6" stroke-width="1.4"/>
+<text x="64" y="472" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">7</text>
+<rect x="90" y="457" width="46" height="22" rx="11" fill="#eaf0ff"/>
+<text x="113" y="472" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">面板</text>
+<text x="152" y="473" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">点结果 → 打开会话</text>
+<text x="152" y="492" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">归档会话先解归档再打开</text>
+<circle cx="64" cy="524" r="11.5" fill="#fff" stroke="#3b6ef6" stroke-width="1.4"/>
+<text x="64" y="528" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">8</text>
+<rect x="90" y="513" width="46" height="22" rx="11" fill="#eaf0ff"/>
+<text x="113" y="528" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11" fill="#3b6ef6" font-weight="600" text-anchor="middle" letter-spacing="0">面板</text>
+<text x="152" y="529" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="13.5" fill="#1b2231" font-weight="500" text-anchor="start" letter-spacing="0">滚到命中消息并高亮</text>
+<text x="152" y="548" font-family='"Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif' font-size="11.5" fill="#8c96a8" font-weight="400" text-anchor="start" letter-spacing="0">窗口没加载的旧消息不高亮，不阻塞打开</text>
+</svg></body></html>
