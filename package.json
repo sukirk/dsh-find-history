@@ -33,6 +33,7 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
+    "README.en.md",
     "CONTRIBUTING.md",
     "INSTALL_GUIDE.md",
     "CHANGELOG.md",
