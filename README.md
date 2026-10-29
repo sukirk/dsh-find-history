@@ -4,7 +4,17 @@
 
 中文友好、毫秒级、零依赖、不需要部署任何全文索引服务。
 
-![预览](docs/preview.png)
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="version">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
+  <img src="https://img.shields.io/badge/DSH-0.2.1--rc.x-7c3aed" alt="DSH">
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen" alt="dependencies">
+  <img src="https://img.shields.io/badge/build-none-lightgrey" alt="build">
+</p>
+
+<p align="center">
+  <img src="docs/preview-hover.png" alt="在侧栏里搜索，悬停看命中原文" width="483">
+</p>
 
 ## 优点
 
@@ -47,19 +57,53 @@ dsh plugin --profile web add github:OWNER/dsh-find-history
 
 `dsh plugin add` 把包名直接转给 pnpm 装进 profile，并把 bundle 加进 `dsh.profile.bundles`。本插件是纯 JS、没有构建步骤，git 安装不需要额外授权 `allowBuilds`。
 
-## 怎么用
-
-- **点侧栏「工作区」标题行第一个图标**（放大镜里带钟针，和右侧自带的标题搜索区分开）打开搜索框。
-- 输入即搜（260ms 防抖），多关键词默认要求**同一段消息里全部出现**才命中；中文长串搜不到时自动按两字切块兜底。
-- 输入框内三个开关：`Aa` 区分大小写、`ab` 整词、`.*` 正则。
-- 第二行「搜索：☐ 输入 ☐ 输出」控制搜哪一池；右侧三个图标：工作区多选（文件夹）、按会话分组（列表）、排序（时间 / 相关性）。
-- 鼠标停在结果行上会弹出命中消息的预览（命中处前 100 字 + 命中段 + 后 100 字，关键词高亮）。
-
-![悬停预览](docs/preview-hover.png)
-- 点结果行即打开那个会话并继续对话；归档会话不会被搜到。
-- `Esc` 先收起下拉/面板，再按一次关闭搜索；关键词会留在输入框里，下次打开自动重搜。
 
 ## 为什么这么快
+
+### 一次搜索发生了什么
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 你
+  participant UI as 侧栏面板
+  participant H as Host 路由
+  participant M as 内存语料
+  U->>UI: 输入「优化」
+  UI->>H: GET /dsh-find-history/search?q=优化
+  H->>M: 子串匹配（输入池，默认）
+  M-->>H: 命中的会话 + 片段位置
+  H-->>UI: JSON（标题、工作区、命中处上下文）
+  UI-->>U: 侧栏结果列表（关键词高亮）
+  U->>UI: 点结果行
+  UI->>U: 打开那个会话继续聊
+```
+
+### 数据怎么流
+
+```mermaid
+flowchart LR
+  subgraph 磁盘
+    LOG["session.v4.jsonl.zstd<br/>多帧 zstd 日志"]
+    DOC[("侧车索引<br/>~/.dsh/cache/find-history/")]
+  end
+  subgraph Host
+    SCAN["scan.mjs<br/>帧头定位 + 行预筛"]
+    STORE["store.mjs<br/>增量续读"]
+    MATCH["内存子串匹配<br/>输入池 / 输出池"]
+    ROUTE["GET /dsh-find-history/search"]
+  end
+  subgraph Client
+    UI["侧栏内联面板<br/>结果 · 分组 · 悬停预览"]
+  end
+  LOG -->|首发安装，子进程分批回填| SCAN
+  SCAN --> STORE
+  STORE --> DOC
+  LOG -.->|日志变大，只解尾部新增帧| STORE
+  DOC --> MATCH
+  MATCH --> ROUTE --> UI
+  UI -->|点结果行| OPEN["打开那个会话继续聊"]
+```
 
 DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.zstd`——**多帧 zstd**拼接。本插件不去解压整份日志，而是：
 
@@ -81,6 +125,35 @@ DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.j
 | 内存语料扫描 | 751 条约 0.13ms；10 万条约 46ms |
 | 磁盘占用 | 侧车索引约 2.5MB（不复制日志正文） |
 
+每个会话的侧车文件长这样（只存自己提取出的文本和读到的位置，不存日志原文）：
+
+```json
+{
+  "sessionId": "session-1f3c…",
+  "cwd": "/home/you/projects/alpha",
+  "title": "优化 v4 炒股交易界面设计",
+  "size": 918273,
+  "mtimeMs": 1761700000000,
+  "readBytes": 918273,
+  "messages": [{ "seq": 12, "time": 1761700000000, "text": "帮我优化一下部署脚本" }],
+  "outputs": [{ "seq": 40, "time": 1761700300000, "text": "已完成，用时 3 分 12 秒。…" }]
+}
+```
+
+## 目录结构
+
+```
+dsh-find-history/
+├── index.mjs        Host half：HTTP 路由、语料、匹配、回填调度
+├── scan.mjs         多帧 zstd 读取、行预筛、标题/消息提取
+├── store.mjs        侧车索引读写、增量续读、旧缓存迁移
+├── backfill.mjs     回填子进程（每次约 12MB，最多 2 个并发）
+├── client.js        Client half：侧栏图标、内联面板、结果渲染
+├── cordis.patch.yml bundle 声明
+├── icon.svg         插件列表图标
+└── locale/          zh / en 文案
+```
+
 ## 隐私
 
 - 只读本机 `~/.dsh/sessions/` 下的会话日志，只写 `~/.dsh/cache/find-history/`。
@@ -93,33 +166,6 @@ DSH 把每个会话写成 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.j
 - 只对 Web profile 有界面；Host 半边在别的 profile 里也能加载，但没有侧栏图标。
 - 侧栏「工作区」标题行是 DSH 自带组件渲染的，没有公开插槽，所以入口图标是**portal 注入**到该行的 DOM 里（只动我们自己的节点，卸载即移除）。
 
-## 仓库结构
-
-```
-index.mjs        Host：HTTP 路由、语料、匹配、排序、分组、分页
-scan.mjs         帧级日志读取（帧头扫描 / 全量 / 尾部增量 / 行分类）
-store.mjs        侧车索引的读写（每会话一文件，原子写）
-backfill.mjs     子进程回填脚本
-client.js        Client：侧栏图标、内联面板、结果渲染、悬停预览、打开会话
-cordis.patch.yml bundle 安装声明
-locale/*.json    zh / en 文案与插件列表元数据
-icon.svg         插件列表图标
-```
-
-开发时把仓库目录用 `dsh plugin --profile web add /path/to/repo` 挂进去，改完在插件列表里关掉再打开即可重载 Host 半边。
-
-## 发布（维护者用）
-
-仓库已就绪，推送前把 README 里的 `OWNER` 换成你的 GitHub 账号：
-
-```bash
-gh repo create OWNER/dsh-find-history --public --source=. --push \
-  --description "DSH 侧栏内联的查找历史：按你输入过的内容找回忘记的会话（中文友好、毫秒级、零依赖）"
-gh repo edit --add-topic dsh-plugin --add-topic dsh --add-topic session-search --add-topic conversation-history
-```
-
-`package.json` 里的 `engines.dsh` 已经写好，插件列表的名称和描述来自 `locale/*.json` 的 `meta`。
-
 ## License
 
-MIT
+[MIT](LICENSE)
