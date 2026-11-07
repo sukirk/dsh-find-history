@@ -75,14 +75,30 @@ test('scattered words never enter the phrase tier, even in whole-word mode', () 
   ])
 })
 
-test('the phrase may be spread over a line break or extra spaces', () => {
+test('the phrase follows VS Code literal search: one contiguous string', () => {
   const matcher = buildMatcher('pip install', FLAGS)
-  assert.equal(matcher.phrase('run pip\ninstall transformers'), true)
-  assert.equal(matcher.phrase('run pip  install transformers'), true)
+  assert.equal(matcher.phrase('run pip install transformers'), true)
+  // VS Code's plain search does not match a line break or a second space for
+  // the space in the query, and it happily matches inside a longer word.
+  assert.equal(matcher.phrase('run pip\ninstall transformers'), false)
+  assert.equal(matcher.phrase('run pip  install transformers'), false)
   assert.equal(matcher.phrase('pip, then install'), false)
+  assert.equal(matcher.phrase('pip installer'), true)
+})
+
+test('whole word only adds boundaries around the phrase ends', () => {
   const wholeMatcher = buildMatcher('pip install', WHOLE_FLAGS)
-  assert.equal(wholeMatcher.phrase('run pip\ninstall transformers'), true)
+  assert.equal(wholeMatcher.phrase('x pip install y'), true)
+  assert.equal(wholeMatcher.phrase('pip installs here'), false)
+  assert.equal(wholeMatcher.phrase('pip installer'), false)
+  assert.equal(wholeMatcher.phrase('run pip\ninstall transformers'), false)
   assert.equal(wholeMatcher.phrase('piper installs things'), false)
+})
+
+test('a typed double space is part of the phrase', () => {
+  const matcher = buildMatcher('pip  install', FLAGS)
+  assert.equal(matcher.phrase('pip install'), false)
+  assert.equal(matcher.phrase('pip  install'), true)
 })
 
 test('a phrase wins over any number of scattered all-word messages', () => {

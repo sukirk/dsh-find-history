@@ -134,7 +134,7 @@ function readLimit(params) {
  */
 function readQuery(params) {
   const raw = params.get('q') ?? ''
-  return raw.replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_CHARS)
+  return raw.trim().slice(0, MAX_QUERY_CHARS)
 }
 
 /**
@@ -324,21 +324,16 @@ function buildMatcher(query, options) {
     .filter((part) => part !== '')
     .map((part) => fold(part))
   const locate = (text, term) => (whole ? findWhole(text, term) : text.indexOf(term))
-  // The phrase is the keywords in order, with only whitespace between them.
-  // Matching the raw query text would miss a phrase broken across a line break
-  // or padded with extra spaces, and would mistake far-apart words for it.
-  const phrasePattern =
-    terms.length > 1
+  // Phrase matching follows the literal search users know from VS Code: the
+  // phrase is the query typed as one contiguous string, so a space is a
+  // literal space. Extra spaces, tabs and line breaks break the phrase, and
+  // "whole word" only adds boundaries around the phrase ends.
+  const phraseText = fold(query)
+  const wholePhrasePattern =
+    whole && terms.length > 1
       ? new RegExp(
-          terms
-            .map((term) => {
-              const escaped = term.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-              return whole
-                ? `(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`
-                : escaped
-            })
-            .join('\\s+'),
-          'u',
+          `(?<![\\p{L}\\p{N}_])${query.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`,
+          options.caseSensitive ? 'u' : 'iu',
         )
       : null
   return {
@@ -371,7 +366,7 @@ function buildMatcher(query, options) {
     phrase: (text) => {
       const body = fold(text)
       if (terms.length === 1) return locate(body, terms[0]) !== -1
-      return phrasePattern.test(body)
+      return wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
     },
   }
 }

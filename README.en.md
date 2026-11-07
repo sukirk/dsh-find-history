@@ -59,7 +59,7 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | Control | Behavior |
 | --- | --- |
 | Scope | By default only your input; tick "output" to also search each turn's final answer |
-| Multiple keywords | Space-separated; an adjacent phrase first (it may span line breaks or extra spaces), then messages containing all keywords, then partial matches |
+| Multiple keywords | Space-separated; an exact phrase first (literal, VS Code style: the space is a space, so line breaks or extra spaces break it; whole-word only adds boundaries at the phrase ends), then messages containing all keywords, then partial matches |
 | `Aa` | Match case |
 | `ab` | Match whole word |
 | `.*` | Regular expression; the panel reports an invalid pattern |

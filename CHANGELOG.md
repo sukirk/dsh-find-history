@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-11-08
+
+- 整句判定改为 VS Code 字面搜索语义：整句是「你输入的一整段连续文本」，空格就是空格。`pip\ninstall`、`pip  install`（多空格/换行）不再算整句，`pip, then install` 也不算；整词模式只在短语首尾加词边界（`pip installer` 不算整词整句，但普通模式仍可命中子串）。
+- 查询内部空格原样保留（不再折叠成单个空格），输入两个空格就要求两个空格。
+- 测试更新：整句/整词边界/双空格 query 三组用例，`node --test test/` 13/13。
+
 ## 1.2.0 — 2026-11-07
 
 - Relevance ranking now compares match quality as an ordered sequence instead of adding keyword counts up: a Session that quotes the query as one adjacent phrase always ranks above Sessions that only repeat its words, no matter how many times the words repeat. A Session that says `pip install` once outranks one that says `install` six times.
