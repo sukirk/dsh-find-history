@@ -59,13 +59,13 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | Control | Behavior |
 | --- | --- |
 | Scope | By default only your input; tick "output" to also search each turn's final answer |
-| Multiple keywords | Space-separated; messages containing all of them rank first, partial matches fill up the rest |
+| Multiple keywords | Space-separated; a message quoting the whole phrase ranks first, then messages containing all keywords, then partial matches |
 | `Aa` | Match case |
 | `ab` | Match whole word |
 | `.*` | Regular expression; the panel reports an invalid pattern |
 | Folder icon | Filter by workspace, multi-select |
 | List icon | Group by session, showing where each session matched |
-| Sort icon | Sort by time (default) or relevance |
+| Sort icon | Sort by time (default) or relevance; under relevance, the whole phrase ranks above all-keyword matches, which rank above partial matches, then by hit count and time |
 | Keyboard | `↑` `↓` move, `Enter` open, `Esc` close |
 | Click a result | Opens the session and highlights the first keyword; archived sessions are unarchived first |
 | Pagination | 24 per page, "Load more" at the bottom |

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 — 2026-11-07
+
+- Relevance ranking now puts the whole query phrase first: sessions quoting `pip install transformers` as one phrase rank above sessions that only scatter those words, which in turn rank above partial matches. The same order applies to rows inside one session, and the relevance score gives an exact phrase a fixed bonus over repeated keyword noise.
+- Add a `node --test test/` suite pinning the ranking rules (phrase tier, full/partial tiers, time order unchanged, single-word queries unchanged).
+
 ## 1.0.1 — 2026-10-29
 
 - Docs: English README (`README.en.md`) with a language switch in both READMEs.

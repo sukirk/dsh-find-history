@@ -420,15 +420,16 @@ function messagePreview(text, index, length) {
 const MAX_GROUP_HITS = 6
 
 /**
- * Order hits inside one Session: more keywords, then the phrase, then the
- * user's own words, then the newest.
+ * Order hits inside one Session: the user's whole phrase first, then the
+ * messages that only repeat its words, then the user's own words, then the
+ * newest.
  * @param {object} left - hit.
  * @param {object} right - hit.
  * @returns {number} sort order.
  */
 function compareHits(left, right) {
-  if (left.matched !== right.matched) return right.matched - left.matched
   if (left.exact !== right.exact) return left.exact ? -1 : 1
+  if (left.matched !== right.matched) return right.matched - left.matched
   if (left.kind !== right.kind) return left.kind === 'input' ? -1 : 1
   return right.message.time - left.message.time
 }
@@ -455,15 +456,18 @@ function collectHits(entry, matcher, fields) {
   return hits.slice(0, MAX_GROUP_HITS)
 }
 
+/** Weight one hit carries when it contains the user's whole phrase. */
+const PHRASE_WEIGHT = 10
+
 /**
  * How strongly one Session matches: the text it keeps repeating the keywords
- * in, with an extra point for the whole phrase.
+ * in, with a heavier point for every hit that contains the whole phrase.
  * @param {object} session - matched Session.
  * @returns {number} relevance score.
  */
 function relevanceOf(session) {
   let score = 0
-  for (const hit of session.hits) score += hit.matched + (hit.exact ? 1 : 0)
+  for (const hit of session.hits) score += hit.matched + (hit.exact ? PHRASE_WEIGHT : 0)
   return score
 }
 
@@ -527,7 +531,8 @@ function archivedSessionIds(ctx) {
 }
 
 /**
- * Search the corpus for Sessions containing the keywords.
+ * Search one corpus for Sessions containing the keywords.
+ * @param {Map<string, object>} source - corpus to search.
  * @param {object} matcher - compiled matcher.
  * @param {string[]} tokens - lowercased keywords, kept for highlighting.
  * @param {ReadonlySet<string>} skip - Session ids left out of the search entirely.
@@ -535,7 +540,7 @@ function archivedSessionIds(ctx) {
  * @param {{ accept?: (entry: object) => boolean, since?: number | null, until?: number | null, sort?: 'time' | 'relevance' }} filter - Session, time, and order filters.
  * @returns {object[]} matching Sessions, best first.
  */
-function searchCorpus(matcher, tokens, skip, fields, filter = {}) {
+function searchCorpusIn(source, matcher, tokens, skip, fields, filter = {}) {
   const accept = typeof filter.accept === 'function' ? filter.accept : null
   const sort = filter.sort === 'relevance' ? 'relevance' : 'time'
   const since = Number.isFinite(filter.since) ? filter.since : null
@@ -546,22 +551,39 @@ function searchCorpus(matcher, tokens, skip, fields, filter = {}) {
     if (until !== null && time > until) return false
     return true
   }
+  const phrase = []
   const full = []
   const partial = []
   const all = matcher.terms.length
-  for (const [sessionId, entry] of corpus) {
+  const multi = all > 1
+  for (const [sessionId, entry] of source) {
     if (skip.has(sessionId) || skip.has(sessionKey(sessionId))) continue
     if (accept !== null && !accept(entry)) continue
     const hits = collectHits(entry, matcher, fields).filter((hit) => inTime(hit.message.time))
     if (hits.length === 0) continue
     const session = { sessionId, entry, hits, best: hits[0] }
-    if (hits[0].matched >= all) full.push(session)
+    if (multi && hits.some((hit) => hit.exact)) phrase.push(session)
+    else if (hits[0].matched >= all) full.push(session)
     else partial.push(session)
   }
-  if (sort === 'time') return rankSessions(full.concat(partial), 'time')
+  if (sort === 'time') return rankSessions(phrase.concat(full, partial), 'time')
+  rankSessions(phrase, sort)
   rankSessions(full, sort)
   rankSessions(partial, sort)
-  return full.concat(partial)
+  return phrase.concat(full, partial)
+}
+
+/**
+ * Search the corpus the Host is serving.
+ * @param {object} matcher - compiled matcher.
+ * @param {string[]} tokens - lowercased keywords, kept for highlighting.
+ * @param {ReadonlySet<string>} skip - Session ids left out of the search entirely.
+ * @param {{ inputs: boolean, outputs: boolean }} fields - pools to search.
+ * @param {{ accept?: (entry: object) => boolean, since?: number | null, until?: number | null, sort?: 'time' | 'relevance' }} filter - Session, time, and order filters.
+ * @returns {object[]} matching Sessions, best first.
+ */
+function searchCorpus(matcher, tokens, skip, fields, filter = {}) {
+  return searchCorpusIn(corpus, matcher, tokens, skip, fields, filter)
 }
 
 /**
@@ -1274,3 +1296,10 @@ export function apply(ctx) {
   sweepTimer.unref?.()
   timers.add(sweepTimer)
 }
+
+/**
+ * Matching and ordering helpers the test suite exercises directly. They stay
+ * unexported from the package surface: package.json only maps `./` to this
+ * module for the Host, and nothing imports these names at runtime.
+ */
+export { buildMatcher, collectHits, compareHits, rankSessions, relevanceOf, searchCorpusIn }
