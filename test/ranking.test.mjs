@@ -160,3 +160,10 @@ test('relevanceOf weights the phrase above repeated keyword noise', () => {
   assert.equal(relevanceOf(session) > relevanceOf(wordsOnly), true)
   assert.deepEqual(rankSessions([wordsOnly, session], 'relevance'), [session, wordsOnly])
 })
+
+test('whole-word mode still ranks the adjacent phrase above scattered words', () => {
+  const flags = { caseSensitive: false, whole: true, regex: false }
+  const matcher = buildMatcher('pip install transformers', flags)
+  assert.equal(matcher.phrase('just run pip install transformers and restart'), true)
+  assert.equal(matcher.phrase('pip broke after the install script; transformers later'), false)
+})

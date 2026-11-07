@@ -355,11 +355,11 @@ function buildMatcher(query, options) {
     phrase: (text) => {
       const body = fold(text)
       if (terms.length === 1) return locate(body, terms[0]) !== -1
-      if (whole) {
-        let matched = 0
-        for (const term of terms) if (locate(body, term) !== -1) matched += 1
-        return matched === terms.length
-      }
+      // Whole-word mode still means "these words, as words" for each keyword,
+      // but the phrase signal must stay adjacency: a message that happens to
+      // contain all three words far apart is not the whole phrase, and must
+      // not outrank the message that spells the query out in order.
+      if (whole) return findWhole(body, phraseText) !== -1
       return body.includes(phraseText)
     },
   }
