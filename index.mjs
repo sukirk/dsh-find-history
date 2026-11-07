@@ -315,6 +315,12 @@ function buildMatcher(query, options) {
       locate,
       count: (text) => (find(text) === -1 ? 0 : 1),
       phrase: (text) => find(text) !== -1,
+      analyze: (text) => {
+        const found = locate(text)
+        return found.index === -1
+          ? { matched: 0, exact: false, chars: 0 }
+          : { matched: 1, exact: true, chars: found.length }
+      },
     }
   }
   const whole = options.whole === true
@@ -367,6 +373,21 @@ function buildMatcher(query, options) {
       const body = fold(text)
       if (terms.length === 1) return locate(body, terms[0]) !== -1
       return wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
+    },
+    analyze: (text) => {
+      const body = fold(text)
+      let matched = 0
+      let chars = 0
+      for (const term of terms) {
+        if (locate(body, term) === -1) continue
+        matched += 1
+        chars += term.length
+      }
+      if (matched === 0) return { matched: 0, exact: false, chars: 0 }
+      if (terms.length === 1) return { matched: 1, exact: true, chars: phraseText.length }
+      const exact =
+        wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
+      return { matched, exact, chars: exact ? phraseText.length : chars }
     },
   }
 }
@@ -426,86 +447,83 @@ function messagePreview(text, index, length) {
 const MAX_GROUP_HITS = 6
 
 /**
- * Order hits inside one Session: the phrase itself first, then the messages
- * that merely repeat its words, then the user's own words, then the newest.
+ * Order hits inside one Session the way the requested sort orders Sessions:
+ * `time` is purely chronological (newest first), `relevance` puts the hit that
+ * covers the most query characters first and breaks ties by time.
  * @param {object} left - hit.
  * @param {object} right - hit.
+ * @param {'time' | 'relevance'} sort - requested order.
  * @returns {number} sort order.
  */
-function compareHits(left, right) {
-  if (left.exact !== right.exact) return left.exact ? -1 : 1
-  if (left.matched !== right.matched) return right.matched - left.matched
+function compareHits(left, right, sort = 'time') {
+  if (sort === 'relevance' && left.chars !== right.chars) return right.chars - left.chars
+  if (left.message.time !== right.message.time) return right.message.time - left.message.time
   if (left.kind !== right.kind) return left.kind === 'input' ? -1 : 1
-  return right.message.time - left.message.time
+  return right.message.seq - left.message.seq
 }
 
 /**
- * Collect the matching rows of one Session and count the match qualities
- * across all of them, before the payload list is capped.
+ * Collect the matching rows of one Session, in the requested order and capped
+ * to the rows the Client shows. The counters used for ranking are taken across
+ * every matching row, before the cap.
  * @param {object} entry - corpus entry.
  * @param {object} matcher - compiled matcher.
  * @param {{ inputs: boolean, outputs: boolean }} fields - pools to search.
  * @param {(time: number) => boolean} inTime - time-window filter.
- * @returns {{ hits: object[], phraseCount: number, allWordsCount: number, maxMatched: number }} hits and quality counts.
+ * @param {'time' | 'relevance'} sort - requested order.
+ * @returns {{ hits: object[], maxMatched: number, maxChars: number, newestTime: number }} hits and ranking counters.
  */
-function collectHitsDetailed(entry, matcher, fields, inTime) {
+function collectHitsDetailed(entry, matcher, fields, inTime, sort = 'time') {
   const hits = []
-  const termCount = matcher.terms.length
-  let phraseCount = 0
-  let allWordsCount = 0
   let maxMatched = 0
+  let maxChars = 0
+  let newestTime = -Infinity
   const scan = (rows, kind) => {
     for (const row of rows) {
-      const matched = matcher.count(row.text)
-      if (matched === 0) continue
+      const quality = matcher.analyze(row.text)
+      if (quality.matched === 0) continue
       if (!inTime(row.time)) continue
-      const exact = matcher.phrase(row.text)
-      if (termCount > 1) {
-        if (exact) phraseCount += 1
-        else if (matched >= termCount) allWordsCount += 1
-      }
-      if (matched > maxMatched) maxMatched = matched
-      hits.push({ message: row, kind, matched, exact })
+      if (quality.matched > maxMatched) maxMatched = quality.matched
+      if (quality.chars > maxChars) maxChars = quality.chars
+      if (row.time > newestTime) newestTime = row.time
+      hits.push({ message: row, kind, matched: quality.matched, exact: quality.exact, chars: quality.chars })
     }
   }
   if (fields.inputs === true) scan(entry.messages, 'input')
   if (fields.outputs === true) scan(entry.outputs ?? [], 'output')
-  hits.sort(compareHits)
-  return { hits: hits.slice(0, MAX_GROUP_HITS), phraseCount, allWordsCount, maxMatched }
+  hits.sort((left, right) => compareHits(left, right, sort))
+  return { hits: hits.slice(0, MAX_GROUP_HITS), maxMatched, maxChars, newestTime }
 }
 
 /**
- * Collect the matching rows of one Session, best first.
+ * Collect the matching rows of one Session, in the requested order.
  * @param {object} entry - corpus entry.
  * @param {object} matcher - compiled matcher.
  * @param {{ inputs: boolean, outputs: boolean }} fields - pools to search.
+ * @param {'time' | 'relevance'} sort - requested order.
  * @returns {object[]} hits, best first.
  */
-function collectHits(entry, matcher, fields) {
-  return collectHitsDetailed(entry, matcher, fields, () => true).hits
+function collectHits(entry, matcher, fields, sort = 'time') {
+  return collectHitsDetailed(entry, matcher, fields, () => true, sort).hits
 }
 
 /**
- * Relevance of one Session as an ordered tuple:
- * `[phrase hits, messages with every word, best keyword coverage]`.
+ * Relevance of one Session as an ordered tuple: the most query characters any
+ * one message covers, then the time of the newest matching message.
  *
- * The tuple is compared lexicographically, not summed. Adding the counts would
- * let repetition of a weaker match outrank one occurrence of the exact phrase,
- * which is how a Session that only says "install" climbed above a Session that
- * says "pip install".
+ * Characters, not hit counts: a Session quoting `pip install` covers 11, one
+ * scattering the words covers 10, one saying only `install` covers 7. Summing
+ * hit counts instead would let a repeated sub-word climb above one phrase.
  * @param {object} session - matched Session.
- * @returns {[number, number, number]} relevance key.
+ * @returns {[number, number]} relevance key.
  */
 function relevanceOf(session) {
-  const hasPhrase = (session.phraseCount ?? 0) > 0
-  const hasEveryWord = (session.allWordsCount ?? 0) > 0
-  const phraseTier = hasPhrase ? 2 : hasEveryWord ? 1 : 0
-  return [phraseTier, session.phraseCount ?? 0, session.allWordsCount ?? 0, session.maxMatched ?? 0]
+  return [session.maxChars ?? 0, session.newestTime ?? 0]
 }
 
 /**
- * Compare two Sessions by relevance: phrase matches first, then messages that
- * carry every keyword, then keyword coverage; ties go to the newest hit.
+ * Compare two Sessions by relevance: more characters covered first, then the
+ * newer match.
  * @param {object} left - Session.
  * @param {object} right - Session.
  * @returns {number} sort order.
@@ -516,30 +534,38 @@ function compareRelevance(left, right) {
   for (let index = 0; index < a.length; index += 1) {
     if (a[index] !== b[index]) return b[index] - a[index]
   }
-  return compareBest(left, right)
+  return compareIds(left, right)
 }
 
 /**
- * Compare two Sessions by their best hit's time, newest first.
+ * Compare two Sessions by their newest matching message, newest first.
  * @param {object} left - Session.
  * @param {object} right - Session.
  * @returns {number} sort order.
  */
-function compareBest(left, right) {
-  if (left.best.message.time !== right.best.message.time) {
-    return right.best.message.time - left.best.message.time
-  }
+function compareNewest(left, right) {
+  if (left.newestTime !== right.newestTime) return right.newestTime - left.newestTime
+  return compareIds(left, right)
+}
+
+/**
+ * Order two Sessions deterministically when their ranking keys tie.
+ * @param {object} left - Session.
+ * @param {object} right - Session.
+ * @returns {number} sort order.
+ */
+function compareIds(left, right) {
   return left.sessionId < right.sessionId ? -1 : left.sessionId > right.sessionId ? 1 : 0
 }
 
 /**
- * Order Sessions: newest first with `time`, by the relevance tuple otherwise.
+ * Order Sessions: purely by newest match with `time`, by relevance key otherwise.
  * @param {object[]} sessions - sessions to order in place.
  * @param {'time' | 'relevance'} sort - requested order.
  * @returns {object[]} the same list.
  */
 function rankSessions(sessions, sort = 'time') {
-  sessions.sort((left, right) => (sort === 'relevance' ? compareRelevance(left, right) : compareBest(left, right)))
+  sessions.sort((left, right) => (sort === 'relevance' ? compareRelevance(left, right) : compareNewest(left, right)))
   return sessions
 }
 
@@ -596,16 +622,16 @@ function searchCorpusIn(source, matcher, tokens, skip, fields, filter = {}) {
   for (const [sessionId, entry] of source) {
     if (skip.has(sessionId) || skip.has(sessionKey(sessionId))) continue
     if (accept !== null && !accept(entry)) continue
-    const collected = collectHitsDetailed(entry, matcher, fields, inTime)
+    const collected = collectHitsDetailed(entry, matcher, fields, inTime, sort)
     if (collected.hits.length === 0) continue
     sessions.push({
       sessionId,
       entry,
       hits: collected.hits,
       best: collected.hits[0],
-      phraseCount: collected.phraseCount,
-      allWordsCount: collected.allWordsCount,
       maxMatched: collected.maxMatched,
+      maxChars: collected.maxChars,
+      newestTime: collected.newestTime,
     })
   }
   return rankSessions(sessions, sort)
@@ -861,7 +887,7 @@ async function handleSearch(ctx, req, res) {
           matcher = chunked
           tokens = chips
           sessions = searchCorpus(chunked, tokens, skip, fields, filter).filter(
-            (session) => session.best.matched === chips.length,
+            (session) => session.maxMatched === chips.length,
           )
         }
       }

@@ -1,10 +1,11 @@
-// Ranking tests for the phrase-first ordering.
+// Ranking tests for the two sort orders.
 //
 // The Host answers two questions: which Sessions contain the words the user
-// typed, and in what order. The order compares match quality lexicographically:
-// a message that quotes the phrase beats a message that only scatters its
-// words, and no amount of scattered-word repetition may climb above the phrase.
-// These tests pin that down without starting a Harness.
+// typed, and in what order. `time` is purely chronological. `relevance` first
+// compares how many query characters one message covers -- a phrase covers all
+// of them, a scattered word only its own letters -- and breaks ties by time.
+// Repetition never adds up, so six `install` rows cannot outrank one
+// `pip install` row. These tests pin that down without starting a Harness.
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
@@ -117,7 +118,7 @@ test('a phrase wins over any number of scattered all-word messages', () => {
   assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase', 'session-all-words'])
 })
 
-test('more phrase messages rank higher than one phrase message', () => {
+test('phrase matches tie on characters, so the newer Session leads', () => {
   const corpus = new Map([
     ['session-one', entry(['pip install transformers'])],
     [
@@ -125,6 +126,7 @@ test('more phrase messages rank higher than one phrase message', () => {
       entry(['pip install transformers today', 'again pip install transformers', 'still pip install transformers']),
     ],
   ])
+  // Both cover 24 characters; repetition adds nothing, so time decides.
   assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), ['session-two', 'session-one'])
 })
 
@@ -133,15 +135,22 @@ test('messages with every word rank above messages with one word', () => {
     ['session-partial', entry(['install only lives here'])],
     ['session-words', entry(['pip and install, far apart'])],
   ])
+  // 3 + 7 characters covered beats 7, even though both are two-row matches.
   assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-words', 'session-partial'])
 })
 
-test('time order is untouched by the relevance tiers', () => {
+test('time order is purely chronological, relevance order is not', () => {
   const corpus = new Map([
     ['session-phrase', entry(['old note: pip install transformers'], 500)],
     ['session-words', entry(['newer note about pip, install and transformers'], 1500)],
   ])
+  // Pure time: the newer Session leads even though it only scatters the words.
   assert.deepEqual(ids(search(corpus, 'pip install transformers', 'time')), ['session-words', 'session-phrase'])
+  // Relevance: 24 covered characters beat 22, no matter which Session is newer.
+  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), [
+    'session-phrase',
+    'session-words',
+  ])
 })
 
 test('one-word query stays a plain substring search', () => {
@@ -152,39 +161,40 @@ test('one-word query stays a plain substring search', () => {
   assert.deepEqual(ids(search(corpus, 'pip', 'relevance')), ['session-b', 'session-a'])
 })
 
-test('phrase hits lead the rows kept for one Session', () => {
-  const hits = collectHits(
-    entry(['transformers later, then pip, then install', 'pip install transformers']),
-    buildMatcher('pip install transformers', FLAGS),
-    { inputs: true, outputs: false },
-  )
-  assert.equal(hits[0].exact, true)
-  assert.equal(hits[0].message.text, 'pip install transformers')
+test('rows inside one Session follow the requested order', () => {
+  const entryRows = entry(['transformers later, then pip, then install', 'pip install transformers'])
+  const matcher = buildMatcher('pip install transformers', FLAGS)
+  const byTime = collectHits(entryRows, matcher, { inputs: true, outputs: false }, 'time')
+  assert.equal(byTime[0].message.text, 'pip install transformers')
+  const byRelevance = collectHits(entryRows, matcher, { inputs: true, outputs: false }, 'relevance')
+  assert.equal(byRelevance[0].exact, true)
+  assert.equal(byRelevance[0].message.text, 'pip install transformers')
 })
 
-test('compareHits prefers the whole phrase before a heavier keyword count', () => {
+test('compareHits compares covered characters, then time', () => {
   const matcher = buildMatcher('pip install transformers', FLAGS)
   const row = (text, time) => ({ seq: time, time, text, lower: text.toLowerCase() })
-  const exact = {
-    message: row('pip install transformers', 10),
-    kind: 'input',
-    matched: matcher.count('pip install transformers'),
-    exact: true,
+  const hit = (text, time, kind = 'input') => {
+    const quality = matcher.analyze(text)
+    return { message: row(text, time), kind, matched: quality.matched, exact: quality.exact, chars: quality.chars }
   }
-  const words = {
-    message: row('pip and install and transformers', 99),
-    kind: 'input',
-    matched: matcher.count('pip and install and transformers'),
-    exact: false,
-  }
-  assert.equal(compareHits(exact, words) < 0, true)
-  assert.equal(compareHits(words, exact) > 0, true)
+  const exact = hit('pip install transformers', 10)
+  const words = hit('pip and install and transformers', 99)
+  // 24 covered characters beat 22 even though the scattered row is newer.
+  assert.equal(compareHits(exact, words, 'relevance') < 0, true)
+  assert.equal(compareHits(words, exact, 'relevance') > 0, true)
+  // Pure time ignores the quality of the row.
+  assert.equal(compareHits(exact, words, 'time') > 0, true)
+  assert.equal(compareHits(words, exact, 'time') < 0, true)
 })
 
-test('relevanceOf is an ordered tuple, not a sum of noise', () => {
-  const phrase = { phraseCount: 1, allWordsCount: 0, maxMatched: 2 }
-  const noise = { phraseCount: 0, allWordsCount: 6, maxMatched: 2 }
-  assert.deepEqual(relevanceOf(phrase), [2, 1, 0, 2])
-  assert.deepEqual(relevanceOf(noise), [1, 0, 6, 2])
+test('relevanceOf is characters covered first, newest match second', () => {
+  const phrase = { maxChars: 24, newestTime: 10 }
+  const noise = { maxChars: 10, newestTime: 99 }
+  assert.deepEqual(relevanceOf(phrase), [24, 10])
+  assert.deepEqual(relevanceOf(noise), [10, 99])
   assert.deepEqual(rankSessions([noise, phrase], 'relevance'), [phrase, noise])
+  // Equal coverage falls back to the newest match.
+  const newerNoise = { maxChars: 10, newestTime: 120 }
+  assert.deepEqual(rankSessions([noise, newerNoise], 'relevance'), [newerNoise, noise])
 })
