@@ -1,10 +1,10 @@
-// Ranking tests for the phrase-first ordering added in this branch.
+// Ranking tests for the phrase-first ordering.
 //
 // The Host answers two questions: which Sessions contain the words the user
-// typed, and in what order. A multi-word query such as `pip install
-// transformers` matches both Sessions that quote the phrase and Sessions that
-// only scatter its words; the phrase has to win. These tests pin that down
-// without starting a Harness.
+// typed, and in what order. The order compares match quality lexicographically:
+// a message that quotes the phrase beats a message that only scatters its
+// words, and no amount of scattered-word repetition may climb above the phrase.
+// These tests pin that down without starting a Harness.
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
@@ -16,7 +16,8 @@ import {
   searchCorpusIn,
 } from '../index.mjs'
 
-const MATCHER_FLAGS = { caseSensitive: false, whole: false, regex: false }
+const FLAGS = { caseSensitive: false, whole: false, regex: false }
+const WHOLE_FLAGS = { caseSensitive: false, whole: true, regex: false }
 
 /** One corpus entry with one user row per text, oldest first. */
 function entry(texts, base = 1000) {
@@ -37,70 +38,94 @@ function ids(sessions) {
 }
 
 /** Search a private corpus with the same arguments the route uses. */
-function search(corpus, query, sort) {
-  const matcher = buildMatcher(query, MATCHER_FLAGS)
+function search(corpus, query, sort, flags = FLAGS) {
+  const matcher = buildMatcher(query, flags)
   return searchCorpusIn(corpus, matcher, matcher.terms, new Set(), { inputs: true, outputs: false }, { sort })
 }
 
-test('quoted phrase outranks a Session that repeats the same words separately', () => {
+test('a single "pip install" outranks a Session that repeats "install" alone', () => {
   const corpus = new Map([
-    ['session-phrase', entry(['please pip install transformers on the box'])],
+    ['session-phrase', entry(['first run pip install transformers'])],
     [
-      'session-words',
+      'session-install',
       entry([
-        'pip and install and transformers are three different words',
-        'pip install is not the phrase here',
-        'install transformers separately another day',
+        'install the wheel',
+        'install the runtime',
+        'install the CLI',
+        'install the plugin',
+        'install the docs',
+        'install the desktop app',
       ]),
     ],
   ])
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), [
-    'session-phrase',
-    'session-words',
-  ])
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase', 'session-install'])
 })
 
-test('single words of the query still rank below the phrase, above partial matches', () => {
+test('scattered words never enter the phrase tier, even in whole-word mode', () => {
   const corpus = new Map([
-    ['session-phrase', entry(['run pip install transformers now'])],
-    ['session-words', entry(['pip and install and transformers'])],
-    ['session-partial', entry(['pip only lives here'])],
+    // Old whole-word mode counted this as the phrase because both words are here.
+    ['session-scattered', entry(['pip broke after the install script, so reinstall'])],
+    ['session-phrase', entry(['pip install is the command to run'])],
   ])
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), [
+  const matcher = buildMatcher('pip install', WHOLE_FLAGS)
+  assert.equal(matcher.phrase('pip broke after the install script, so reinstall'), false)
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance', WHOLE_FLAGS)), [
     'session-phrase',
-    'session-words',
-    'session-partial',
+    'session-scattered',
   ])
 })
 
-test('relevance keeps the heavier phrase match when both Sessions quote the phrase', () => {
+test('the phrase may be spread over a line break or extra spaces', () => {
+  const matcher = buildMatcher('pip install', FLAGS)
+  assert.equal(matcher.phrase('run pip\ninstall transformers'), true)
+  assert.equal(matcher.phrase('run pip  install transformers'), true)
+  assert.equal(matcher.phrase('pip, then install'), false)
+  const wholeMatcher = buildMatcher('pip install', WHOLE_FLAGS)
+  assert.equal(wholeMatcher.phrase('run pip\ninstall transformers'), true)
+  assert.equal(wholeMatcher.phrase('piper installs things'), false)
+})
+
+test('a phrase wins over any number of scattered all-word messages', () => {
+  const corpus = new Map([
+    ['session-phrase', entry(['one pip install only'])],
+    [
+      'session-all-words',
+      entry([
+        'pip here, install there',
+        'pip again, install again',
+        'install now, pip later',
+        'pip pip pip, install install install',
+      ]),
+    ],
+  ])
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase', 'session-all-words'])
+})
+
+test('more phrase messages rank higher than one phrase message', () => {
   const corpus = new Map([
     ['session-one', entry(['pip install transformers'])],
     [
       'session-two',
-      entry([
-        'pip install transformers today',
-        'again pip install transformers',
-        'still pip install transformers',
-      ]),
+      entry(['pip install transformers today', 'again pip install transformers', 'still pip install transformers']),
     ],
   ])
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), [
-    'session-two',
-    'session-one',
-  ])
+  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), ['session-two', 'session-one'])
 })
 
-test('time order is untouched by the phrase tier', () => {
+test('messages with every word rank above messages with one word', () => {
+  const corpus = new Map([
+    ['session-partial', entry(['install only lives here'])],
+    ['session-words', entry(['pip and install, far apart'])],
+  ])
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-words', 'session-partial'])
+})
+
+test('time order is untouched by the relevance tiers', () => {
   const corpus = new Map([
     ['session-phrase', entry(['old note: pip install transformers'], 500)],
     ['session-words', entry(['newer note about pip, install and transformers'], 1500)],
   ])
-  // The phrase Session is older here; time order must still put it last.
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'time')), [
-    'session-words',
-    'session-phrase',
-  ])
+  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'time')), ['session-words', 'session-phrase'])
 })
 
 test('one-word query stays a plain substring search', () => {
@@ -113,11 +138,8 @@ test('one-word query stays a plain substring search', () => {
 
 test('phrase hits lead the rows kept for one Session', () => {
   const hits = collectHits(
-    entry([
-      'transformers later, then pip, then install',
-      'pip install transformers',
-    ]),
-    buildMatcher('pip install transformers', MATCHER_FLAGS),
+    entry(['transformers later, then pip, then install', 'pip install transformers']),
+    buildMatcher('pip install transformers', FLAGS),
     { inputs: true, outputs: false },
   )
   assert.equal(hits[0].exact, true)
@@ -125,7 +147,7 @@ test('phrase hits lead the rows kept for one Session', () => {
 })
 
 test('compareHits prefers the whole phrase before a heavier keyword count', () => {
-  const matcher = buildMatcher('pip install transformers', MATCHER_FLAGS)
+  const matcher = buildMatcher('pip install transformers', FLAGS)
   const row = (text, time) => ({ seq: time, time, text, lower: text.toLowerCase() })
   const exact = {
     message: row('pip install transformers', 10),
@@ -143,27 +165,10 @@ test('compareHits prefers the whole phrase before a heavier keyword count', () =
   assert.equal(compareHits(words, exact) > 0, true)
 })
 
-test('relevanceOf weights the phrase above repeated keyword noise', () => {
-  const session = {
-    hits: [
-      { matched: 3, exact: true },
-      { matched: 2, exact: false },
-    ],
-  }
-  const wordsOnly = {
-    hits: [
-      { matched: 3, exact: false },
-      { matched: 3, exact: false },
-      { matched: 3, exact: false },
-    ],
-  }
-  assert.equal(relevanceOf(session) > relevanceOf(wordsOnly), true)
-  assert.deepEqual(rankSessions([wordsOnly, session], 'relevance'), [session, wordsOnly])
-})
-
-test('whole-word mode still ranks the adjacent phrase above scattered words', () => {
-  const flags = { caseSensitive: false, whole: true, regex: false }
-  const matcher = buildMatcher('pip install transformers', flags)
-  assert.equal(matcher.phrase('just run pip install transformers and restart'), true)
-  assert.equal(matcher.phrase('pip broke after the install script; transformers later'), false)
+test('relevanceOf is an ordered tuple, not a sum of noise', () => {
+  const phrase = { phraseCount: 1, allWordsCount: 0, maxMatched: 2 }
+  const noise = { phraseCount: 0, allWordsCount: 6, maxMatched: 2 }
+  assert.deepEqual(relevanceOf(phrase), [2, 1, 0, 2])
+  assert.deepEqual(relevanceOf(noise), [1, 0, 6, 2])
+  assert.deepEqual(rankSessions([noise, phrase], 'relevance'), [phrase, noise])
 })

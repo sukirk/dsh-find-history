@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 — 2026-11-07
+
+- Relevance ranking now compares match quality as an ordered sequence instead of adding keyword counts up: a Session that quotes the query as one adjacent phrase always ranks above Sessions that only repeat its words, no matter how many times the words repeat. A Session that says `pip install` once outranks one that says `install` six times.
+- A phrase may span a line break or several spaces, so `pip\ninstall` inside a wrapped code block counts as the phrase, and whole-word mode treats the phrase as adjacency rather than mere co-presence of the words.
+- The order of rows inside one Session follows the same phrase-first rule, and the relevance badge only marks a real adjacent phrase.
+
 ## 1.1.0 — 2026-11-07
 
 - Relevance ranking now puts the whole query phrase first: sessions quoting `pip install transformers` as one phrase rank above sessions that only scatter those words, which in turn rank above partial matches. The same order applies to rows inside one session, and the relevance score gives an exact phrase a fixed bonus over repeated keyword noise.
