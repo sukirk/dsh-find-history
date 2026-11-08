@@ -32,6 +32,7 @@ The DSH sidebar already has a search icon; it matches session titles. This plugi
 - **Millisecond results**: on one machine with one dataset, a search takes 0.7 ms median (p95 2.8 ms, worst 13 ms); comparable plugins range from 22–38 ms to 12 s.
 - **Usable right after install**: no FTS dependency, no external index service. On first start a ~3 MB sidecar index is built in the background: first results after about 2 s, fully built in 4.7 s. Backfill runs in child processes; the resident host process peaks around 70 MB.
 - **Only real user input is indexed**: by default only what you typed is searchable — skill catalogs and runtime-context injections from the harness do not pollute results. Tick "output" to search final answers as well.
+- **VS Code-compatible query syntax**: spaces are AND, quotes are literal phrases, `!` excludes; whole-word, regex and match-case stack on top.
 - **No Chinese tokenizer needed**: `炒股界面` matches `优化炒股界面与 K线缩放` directly; when a long keyword has no hit, matching falls back to two-character chunks.
 - **Inline sidebar UI**: results sit in the sidebar with keyword highlighting and a hover preview; clicking opens the session and scrolls to the first keyword (if that message is not loaded yet, the conversation opens at the top).
 - **Zero dependencies, no build**: five JS files, installable with `dsh plugin add`, no `allowBuilds` approval and no build script to run.
@@ -59,7 +60,7 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | Control | Behavior |
 | --- | --- |
 | Scope | By default only your input; tick "output" to also search each turn's final answer |
-| Multiple keywords | Space-separated; an exact phrase first (literal, VS Code style: the space is a space, so line breaks or extra spaces break it; whole-word only adds boundaries at the phrase ends), then messages containing all keywords, then partial matches |
+| Multiple keywords | VS Code semantics: every space-separated keyword has to appear (AND) anywhere in the Session; `"pip install"` keeps a literal contiguous phrase; `!transformers` excludes Sessions containing it and `!"quick pip install"` excludes the phrase |
 | `Aa` | Match case |
 | `ab` | Match whole word |
 | `.*` | Regular expression; the panel reports an invalid pattern |

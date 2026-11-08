@@ -283,6 +283,68 @@ function chunkKeywords(token) {
 }
 
 /**
+ * Split a query into the parts the VS Code search box understands: double
+ * quotes make one literal phrase, a leading `!` excludes a word or phrase, and
+ * every remaining word has to be present (space-separated terms are AND).
+ * @param {string} query - normalized query.
+ * @returns {{ positives: { text: string, quoted: boolean }[], negatives: string[] }} parsed parts.
+ */
+function parseQueryParts(query) {
+  const positives = []
+  const negatives = []
+  const pushWord = (word) => {
+    if (word === '') return
+    if (word.startsWith('!') && word.length > 1) {
+      negatives.push(word.slice(1))
+      return
+    }
+    positives.push({ text: word, quoted: false })
+  }
+  let index = 0
+  let word = ''
+  while (index < query.length) {
+    const char = query[index]
+    if (char === '!' && query[index + 1] === '"') {
+      // VS Code allows excluding a quoted phrase: !"pip install".
+      let cursor = index + 2
+      let phrase = ''
+      while (cursor < query.length && query[cursor] !== '"') {
+        phrase += query[cursor]
+        cursor += 1
+      }
+      if (phrase !== '') negatives.push(phrase)
+      index = cursor + 1
+      continue
+    }
+    if (char === '"') {
+      if (word !== '') {
+        pushWord(word)
+        word = ''
+      }
+      let cursor = index + 1
+      let phrase = ''
+      while (cursor < query.length && query[cursor] !== '"') {
+        phrase += query[cursor]
+        cursor += 1
+      }
+      if (phrase !== '') positives.push({ text: phrase, quoted: true })
+      index = cursor + 1
+      continue
+    }
+    if (/\s/u.test(char)) {
+      pushWord(word)
+      word = ''
+      index += 1
+      continue
+    }
+    word += char
+    index += 1
+  }
+  pushWord(word)
+  return { positives, negatives }
+}
+
+/**
  * Compile one query into the matching primitives the search needs: how many
  * keywords a text contains, where the first one starts, and whether the whole
  * phrase appears.
@@ -298,19 +360,39 @@ function buildMatcher(query, options) {
     } catch {
       return null
     }
+    // In regex mode VS Code still honours the whole-word toggle by wrapping the
+    // pattern in word boundaries.
+    const wholeExpression =
+      options.whole === true
+        ? new RegExp(`(?<![\\p{L}\\p{N}_])(?:${query})(?![\\p{L}\\p{N}_])`, options.caseSensitive ? 'u' : 'iu')
+        : null
+    if (wholeExpression !== null) {
+      try {
+        wholeExpression.exec('')
+      } catch {
+        return null
+      }
+    }
+    const matchOne = (text) => {
+      const source = wholeExpression ?? expression
+      source.lastIndex = 0
+      return source.exec(text)
+    }
     const find = (text) => {
-      expression.lastIndex = 0
-      const found = expression.exec(text)
+      const found = matchOne(text)
       return found === null ? -1 : found.index
     }
     const locate = (text) => {
-      expression.lastIndex = 0
-      const found = expression.exec(text)
+      const found = matchOne(text)
       return found === null ? { index: -1, length: 0 } : { index: found.index, length: found[0].length }
     }
     return {
       regex: true,
       terms: [query],
+      negatives: [],
+      explicitPhrase: false,
+      highlightTokens: [query],
+      requiresAllTerms: false,
       find,
       locate,
       count: (text) => (find(text) === -1 ? 0 : 1),
@@ -318,38 +400,52 @@ function buildMatcher(query, options) {
       analyze: (text) => {
         const found = locate(text)
         return found.index === -1
-          ? { matched: 0, exact: false, chars: 0 }
-          : { matched: 1, exact: true, chars: found.length }
+          ? { matched: 0, exact: false, chars: 0, indexes: [] }
+          : { matched: 1, exact: true, chars: found.length, indexes: [0] }
       },
     }
   }
   const whole = options.whole === true
   const fold = (text) => (options.caseSensitive ? text : text.toLowerCase())
-  const terms = query
-    .split(/\s+/u)
-    .filter((part) => part !== '')
-    .map((part) => fold(part))
-  const locate = (text, term) => (whole ? findWhole(text, term) : text.indexOf(term))
+  // Parse once: positives must all be present, negatives must not appear at
+  // all, which is exactly how VS Code treats !exclusions and quoted phrases.
+  const parsed = parseQueryParts(query)
+  const positives = parsed.positives.map((part) => ({ ...part, text: fold(part.text) }))
+  const negatives = parsed.negatives.map((part) => fold(part))
+  const terms = positives.map((part) => part.text)
+  const explicitPhrase = positives.some((part) => part.quoted === true)
+  const highlightTokens = []
+  for (const part of positives) {
+    for (const word of part.text.split(/\s+/u)) {
+      if (word === '' || highlightTokens.includes(word)) continue
+      highlightTokens.push(word)
+      if (highlightTokens.length >= MAX_TOKENS) break
+    }
+  }
+  const locateTerm = (body, term) => (whole ? findWhole(body, term) : body.indexOf(term))
   // Phrase matching follows the literal search users know from VS Code: the
-  // phrase is the query typed as one contiguous string, so a space is a
-  // literal space. Extra spaces, tabs and line breaks break the phrase, and
-  // "whole word" only adds boundaries around the phrase ends.
-  const phraseText = fold(query)
+  // phrase is the positive part of the query typed as one contiguous string,
+  // so a space is a literal space. Extra spaces, tabs and line breaks break the
+  // phrase, and "whole word" only adds boundaries around the phrase ends.
+  const phraseText = fold(positives.map((part) => part.text).join(' '))
   const wholePhrasePattern =
     whole && terms.length > 1
       ? new RegExp(
-          `(?<![\\p{L}\\p{N}_])${query.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`,
+          `(?<![\\p{L}\\p{N}_])${phraseText.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`,
           options.caseSensitive ? 'u' : 'iu',
         )
       : null
   return {
     regex: false,
     terms,
+    negatives,
+    explicitPhrase,
+    highlightTokens,
     locate: (text) => {
       const body = fold(text)
       let best = { index: -1, length: 0 }
       for (const term of terms) {
-        const here = locate(body, term)
+        const here = locateTerm(body, term)
         if (here !== -1 && (best.index === -1 || here < best.index)) best = { index: here, length: term.length }
       }
       return best
@@ -358,7 +454,7 @@ function buildMatcher(query, options) {
       const body = fold(text)
       let first = -1
       for (const term of terms) {
-        const here = locate(body, term)
+        const here = locateTerm(body, term)
         if (here !== -1 && (first === -1 || here < first)) first = here
       }
       return first
@@ -366,29 +462,35 @@ function buildMatcher(query, options) {
     count: (text) => {
       const body = fold(text)
       let matched = 0
-      for (const term of terms) if (locate(body, term) !== -1) matched += 1
+      for (const term of terms) if (locateTerm(body, term) !== -1) matched += 1
       return matched
     },
     phrase: (text) => {
       const body = fold(text)
-      if (terms.length === 1) return locate(body, terms[0]) !== -1
+      if (terms.length === 0) return false
+      if (terms.length === 1) return locateTerm(body, terms[0]) !== -1
       return wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
     },
     analyze: (text) => {
       const body = fold(text)
       let matched = 0
       let chars = 0
-      for (const term of terms) {
-        if (locate(body, term) === -1) continue
+      const indexes = []
+      for (let index = 0; index < terms.length; index += 1) {
+        if (locateTerm(body, terms[index]) === -1) continue
         matched += 1
-        chars += term.length
+        chars += terms[index].length
+        indexes.push(index)
       }
-      if (matched === 0) return { matched: 0, exact: false, chars: 0 }
-      if (terms.length === 1) return { matched: 1, exact: true, chars: phraseText.length }
+      let negative = 0
+      for (const term of negatives) if (locateTerm(body, term) !== -1) negative += 1
+      if (matched === 0) return { matched: 0, exact: false, chars: 0, indexes, negative }
+      if (terms.length === 1) return { matched: 1, exact: true, chars: phraseText.length, indexes, negative }
       const exact =
         wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
-      return { matched, exact, chars: exact ? phraseText.length : chars }
+      return { matched, exact, chars: exact ? phraseText.length : chars, indexes, negative }
     },
+    requiresAllTerms: terms.length > 1,
   }
 }
 
@@ -471,18 +573,24 @@ function compareHits(left, right, sort = 'time') {
  * @param {{ inputs: boolean, outputs: boolean }} fields - pools to search.
  * @param {(time: number) => boolean} inTime - time-window filter.
  * @param {'time' | 'relevance'} sort - requested order.
- * @returns {{ hits: object[], maxMatched: number, maxChars: number, newestTime: number }} hits and ranking counters.
+ * @returns {{ hits: object[], maxMatched: number, maxChars: number, newestTime: number, matchedTerms: number, excluded: boolean }} hits, ranking counters, and the !term verdict.
  */
 function collectHitsDetailed(entry, matcher, fields, inTime, sort = 'time') {
   const hits = []
+  const seenTerms = new Set()
   let maxMatched = 0
   let maxChars = 0
   let newestTime = -Infinity
+  let excluded = false
   const scan = (rows, kind) => {
     for (const row of rows) {
       const quality = matcher.analyze(row.text)
-      if (quality.matched === 0) continue
       if (!inTime(row.time)) continue
+      // VS Code drops a file when any !term appears anywhere in it, and that
+      // holds even for rows that contain none of the positive terms.
+      if (quality.negative > 0) excluded = true
+      if (quality.matched === 0) continue
+      for (const index of quality.indexes) seenTerms.add(index)
       if (quality.matched > maxMatched) maxMatched = quality.matched
       if (quality.chars > maxChars) maxChars = quality.chars
       if (row.time > newestTime) newestTime = row.time
@@ -492,7 +600,7 @@ function collectHitsDetailed(entry, matcher, fields, inTime, sort = 'time') {
   if (fields.inputs === true) scan(entry.messages, 'input')
   if (fields.outputs === true) scan(entry.outputs ?? [], 'output')
   hits.sort((left, right) => compareHits(left, right, sort))
-  return { hits: hits.slice(0, MAX_GROUP_HITS), maxMatched, maxChars, newestTime }
+  return { hits: hits.slice(0, MAX_GROUP_HITS), maxMatched, maxChars, newestTime, matchedTerms: seenTerms.size, excluded }
 }
 
 /**
@@ -624,12 +732,15 @@ function searchCorpusIn(source, matcher, tokens, skip, fields, filter = {}) {
     if (accept !== null && !accept(entry)) continue
     const collected = collectHitsDetailed(entry, matcher, fields, inTime, sort)
     if (collected.hits.length === 0) continue
+    if (collected.excluded === true) continue
+    if (matcher.requiresAllTerms === true && collected.matchedTerms < matcher.terms.length) continue
     sessions.push({
       sessionId,
       entry,
       hits: collected.hits,
       best: collected.hits[0],
       maxMatched: collected.maxMatched,
+      maxTerms: collected.matchedTerms,
       maxChars: collected.maxChars,
       newestTime: collected.newestTime,
     })
@@ -689,7 +800,8 @@ function describeHit(hit, matcher, tokens) {
     matchedTokens: hit.matched,
     // One keyword is its own phrase, so the badge only means something for
     // queries the user wrote as several words.
-    phrase: matcher.chunked !== true && hit.exact && matcher.terms.length > 1,
+    phrase:
+      matcher.chunked !== true && hit.exact && (matcher.terms.length > 1 || matcher.explicitPhrase === true),
   }
 }
 
@@ -852,7 +964,7 @@ async function handleSearch(ctx, req, res) {
     sendJson(res, 200, { ...cached, pending: pending.size })
     return
   }
-  let tokens = splitTokens(query)
+  let tokens = matcher.highlightTokens ?? splitTokens(query)
   const skip = archivedSessionIds(ctx)
   const scope = workspaceIds.size === 0 ? null : workspaceIds
   // Resolve each Session's Workspace once per request; the selector is cheap
@@ -874,7 +986,14 @@ async function handleSearch(ctx, req, res) {
   }
   try {
     let sessions = searchCorpus(matcher, tokens, skip, fields, filter)
-    if (sessions.length === 0 && tokens.length === 1 && options.regex === false && options.whole === false) {
+    if (
+      sessions.length === 0 &&
+      tokens.length === 1 &&
+      options.regex === false &&
+      options.whole === false &&
+      (matcher.negatives?.length ?? 0) === 0 &&
+      matcher.explicitPhrase !== true
+    ) {
       // 「炒股界面」 has no space, so the substring misses a message that says
       // 「炒股交易界面」; retry with its two-character chunks before giving up.
       const chips = chunkKeywords(tokens[0])

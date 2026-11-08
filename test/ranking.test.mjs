@@ -44,7 +44,7 @@ function search(corpus, query, sort, flags = FLAGS) {
   return searchCorpusIn(corpus, matcher, matcher.terms, new Set(), { inputs: true, outputs: false }, { sort })
 }
 
-test('a single "pip install" outranks a Session that repeats "install" alone', () => {
+test('a Session without every keyword drops out, the way VS Code AND search works', () => {
   const corpus = new Map([
     ['session-phrase', entry(['first run pip install transformers'])],
     [
@@ -58,8 +58,11 @@ test('a single "pip install" outranks a Session that repeats "install" alone', (
         'install the desktop app',
       ]),
     ],
+    ['session-pip', entry(['pip is short for pip3'])],
   ])
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase', 'session-install'])
+  // "pip install" asks for both terms: a Session that only repeats one of them
+  // is not a result at all, so no amount of repetition can outrank the phrase.
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase'])
 })
 
 test('scattered words never enter the phrase tier, even in whole-word mode', () => {
@@ -96,10 +99,75 @@ test('whole word only adds boundaries around the phrase ends', () => {
   assert.equal(wholeMatcher.phrase('piper installs things'), false)
 })
 
-test('a typed double space is part of the phrase', () => {
-  const matcher = buildMatcher('pip  install', FLAGS)
-  assert.equal(matcher.phrase('pip install'), false)
-  assert.equal(matcher.phrase('pip  install'), true)
+test('repeated spaces are word separators, like VS Code; quotes keep a phrase literal', () => {
+  // Outside quotes VS Code splits on any whitespace run, so a double space is
+  // the same two keywords as a single space.
+  const spaced = buildMatcher('pip  install', FLAGS)
+  assert.deepEqual(spaced.terms, ['pip', 'install'])
+  assert.equal(spaced.phrase('pip install'), true)
+  // Inside double quotes the spaces stay literal, so the phrase is one term.
+  const quoted = buildMatcher('"pip  install"', FLAGS)
+  assert.deepEqual(quoted.terms, ['pip  install'])
+  assert.equal(quoted.phrase('pip install'), false)
+  assert.equal(quoted.phrase('run pip  install now'), true)
+})
+
+test('a quoted phrase combines with other terms, like VS Code', () => {
+  const matcher = buildMatcher('"pip install" transformers', FLAGS)
+  assert.equal(matcher.requiresAllTerms, true)
+  const row = { seq: 1, time: 1, text: 'pip install transformers', lower: '' }
+  const other = { seq: 2, time: 2, text: 'pip installer transformers', lower: '' }
+  assert.equal(matcher.count(row.text), 2)
+  assert.equal(matcher.phrase(row.text), true)
+  // "pip installer" contains "pip install" literally, but the quoted phrase is
+  // still one positive term; only the transcript decides which rows show up.
+  assert.equal(matcher.count(other.text), 2)
+  // The positive text only counts as one phrase when it appears contiguously.
+  assert.equal(matcher.phrase(other.text), false)
+})
+
+test('a leading ! excludes a keyword anywhere in the Session', () => {
+  const corpus = new Map([
+    ['session-good', entry(['pip install the wheel'])],
+    ['session-bad', entry(['pip install the wheel', 'then transformers broke'])],
+  ])
+  const matcher = buildMatcher('pip install !transformers', FLAGS)
+  assert.equal(matcher.negatives.length, 1)
+  assert.deepEqual(ids(searchCorpusIn(corpus, matcher, matcher.highlightTokens, new Set(), { inputs: true, outputs: false }, { sort: 'relevance' })), ['session-good'])
+})
+
+test('a negated quoted phrase excludes the whole literal phrase', () => {
+  const corpus = new Map([
+    ['session-good', entry(['pip install went fine today'])],
+    ['session-bad', entry(['pip install went fine', 'the quick pip install broke again'])],
+  ])
+  const matcher = buildMatcher('pip !"quick pip install"', FLAGS)
+  assert.deepEqual(matcher.negatives, ['quick pip install'])
+  assert.deepEqual(
+    ids(
+      searchCorpusIn(
+        corpus,
+        matcher,
+        matcher.highlightTokens,
+        new Set(),
+        { inputs: true, outputs: false },
+        { sort: 'relevance' },
+      ),
+    ),
+    ['session-good'],
+  )
+})
+
+test('regular expression mode still honours the whole-word toggle', () => {
+  const flags = { caseSensitive: false, whole: true, regex: true }
+  const matcher = buildMatcher('pip', flags)
+  assert.equal(matcher.find('pip3 has a bug'), -1)
+  assert.equal(matcher.find('we run pip here') >= 0, true)
+})
+
+test('highlight tokens strip quotes and exclusions', () => {
+  const matcher = buildMatcher('"pip install" !transformers torch', FLAGS)
+  assert.deepEqual(matcher.highlightTokens, ['pip', 'install', 'torch'])
 })
 
 test('a phrase wins over any number of scattered all-word messages', () => {
@@ -130,13 +198,14 @@ test('phrase matches tie on characters, so the newer Session leads', () => {
   assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), ['session-two', 'session-one'])
 })
 
-test('messages with every word rank above messages with one word', () => {
+test('the keywords have to appear somewhere in the Session, not in one message', () => {
   const corpus = new Map([
     ['session-partial', entry(['install only lives here'])],
-    ['session-words', entry(['pip and install, far apart'])],
+    ['session-words', entry(['pip appears in this message', 'and install appears in that one'])],
   ])
-  // 3 + 7 characters covered beats 7, even though both are two-row matches.
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-words', 'session-partial'])
+  // VS Code AND applies per file: the terms may sit on different lines. Only
+  // the Session that has both survives, even though no single message has both.
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-words'])
 })
 
 test('time order is purely chronological, relevance order is not', () => {
