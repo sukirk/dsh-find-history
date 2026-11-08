@@ -428,6 +428,11 @@ function buildMatcher(query, options) {
   // so a space is a literal space. Extra spaces, tabs and line breaks break the
   // phrase, and "whole word" only adds boundaries around the phrase ends.
   const phraseText = fold(positives.map((part) => part.text).join(' '))
+  // VS Code's whole-word toggle never splits the query into separate words: the
+  // query stays one literal string and the toggle only pins its two ends to word
+  // boundaries. A multi-word query therefore has to appear contiguously --
+  // otherwise `pip` here and `install` there would pass as a whole-word match.
+  const requiresPhrase = whole && terms.length > 1
   const wholePhrasePattern =
     whole && terms.length > 1
       ? new RegExp(
@@ -460,6 +465,7 @@ function buildMatcher(query, options) {
       // Open on the phrase, not on the first stray word: a message that says
       // `pip -V` before `pip install` must still show `pip install`.
       const at = phraseAt(body)
+      if (requiresPhrase) return at === -1 ? { index: -1, length: 0 } : { index: at, length: phraseText.length }
       if (at !== -1) return { index: at, length: phraseText.length }
       let best = { index: -1, length: 0 }
       for (const term of terms) {
@@ -470,6 +476,7 @@ function buildMatcher(query, options) {
     },
     find: (text) => {
       const body = fold(text)
+      if (requiresPhrase) return phraseAt(body)
       let first = -1
       for (const term of terms) {
         const here = locateTerm(body, term)
@@ -479,6 +486,7 @@ function buildMatcher(query, options) {
     },
     count: (text) => {
       const body = fold(text)
+      if (requiresPhrase) return phraseAt(body) === -1 ? 0 : terms.length
       let matched = 0
       for (const term of terms) if (locateTerm(body, term) !== -1) matched += 1
       return matched
@@ -489,8 +497,16 @@ function buildMatcher(query, options) {
       if (terms.length === 1) return locateTerm(body, terms[0]) !== -1
       return phraseAt(body) !== -1
     },
+
     analyze: (text) => {
       const body = fold(text)
+      if (requiresPhrase) {
+        let negative = 0
+        for (const term of negatives) if (locateTerm(body, term) !== -1) negative += 1
+        if (phraseAt(body) === -1) return { matched: 0, exact: false, chars: 0, indexes: [], negative }
+        const every = terms.map((_, index) => index)
+        return { matched: terms.length, exact: true, chars: phraseText.length, indexes: every, negative }
+      }
       let matched = 0
       let chars = 0
       const indexes = []

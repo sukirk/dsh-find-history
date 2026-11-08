@@ -63,7 +63,7 @@ dsh plugin --profile web add github:sukirk/dsh-find-history
 | 检索范围 | 默认只搜你的输入；勾选「输出」后同时搜每轮最终回答 |
 | 多关键词 | 与 VS Code 一致：空格分隔的每个关键词都必须出现（AND），可以分散在不同消息；`"pip install"` 引号内是字面连续短语；`!transformers` 排除含该词的会话，`!"quick pip install"` 排除整段短语 |
 | `Aa` | 区分大小写 |
-| `ab` | 整词匹配 |
+| `ab` | 整词匹配，语义同 VS Code 的「全字匹配」：查询文本当作一整段字面量，开关只在首尾校验词边界。多关键词时必须连续出现——`pip` 和 `install` 分散在两处不算，`xpip install` 也不算；单关键词也会避开 `piper`、`installed` 这类粘连。词边界按字母/数字/下划线/汉字算词内字符，连字符、点、斜杠是分隔符（与 VS Code 的 `\b` 一致），所以 `--no-install-recommends` 里的 `install` 算整词 |
 | `.*` | 正则，输入不合法时面板会提示 |
 | 文件夹图标 | 按工作区筛选，可多选 |
 | 列表图标 | 按会话分组，显示每会话的命中位置 |

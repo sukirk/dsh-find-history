@@ -62,11 +62,12 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | Scope | By default only your input; tick "output" to also search each turn's final answer |
 | Multiple keywords | VS Code semantics: every space-separated keyword has to appear (AND) anywhere in the Session; `"pip install"` keeps a literal contiguous phrase; `!transformers` excludes Sessions containing it and `!"quick pip install"` excludes the phrase |
 | `Aa` | Match case |
-| `ab` | Match whole word |
+| `ab` | Match whole word, the VS Code way: the query stays one literal string and the toggle only pins its two ends to word boundaries. A multi-keyword query must appear contiguously — `pip` here and `install` there does not count, nor does `xpip install`; a single keyword also skips glued forms such as `piper` or `installed`. Letters, digits, underscore and CJK are word characters while hyphen, dot and slash separate words (the `\b` rule VS Code uses), so `install` inside `--no-install-recommends` is a whole word |
 | `.*` | Regular expression; the panel reports an invalid pattern |
 | Folder icon | Filter by workspace, multi-select |
 | List icon | Group by session, showing where each session matched |
-| Sort icon | Sort by time (default) or relevance. Time is purely chronological: Sessions by their newest match, messages inside a Session newest first; match quality never jumps the queue. Relevance compares how many query characters one message covers — a whole phrase covers all of them, scattered words only their own letters, repetition never adds up — and falls back to time |. Each row's excerpt and relevance badge come from the best-matching message of that Session, and the excerpt starts at the phrase, never at an earlier stray single keyword
+| Sort icon | Sort by time (default) or relevance. Time is purely chronological: Sessions by their newest match, messages inside a Session newest first; match quality never jumps the queue. Relevance compares how many query characters one message covers — a whole phrase covers all of them, scattered words only their own letters, repetition never adds up — and falls back to time |
+| Row summary | Each row's excerpt and relevance badge come from the best-matching message of that Session, and the excerpt starts at the phrase, never at an earlier stray single keyword |
 | Keyboard | `↑` `↓` move, `Enter` open, `Esc` close |
 | Click a result | Opens the session and highlights the first keyword; archived sessions are unarchived first |
 | Pagination | 24 per page, "Load more" at the bottom |

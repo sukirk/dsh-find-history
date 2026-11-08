@@ -65,18 +65,18 @@ test('a Session without every keyword drops out, the way VS Code AND search work
   assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase'])
 })
 
-test('scattered words never enter the phrase tier, even in whole-word mode', () => {
+test('whole-word mode keeps the query contiguous, like VS Code', () => {
   const corpus = new Map([
-    // Old whole-word mode counted this as the phrase because both words are here.
     ['session-scattered', entry(['pip broke after the install script, so reinstall'])],
     ['session-phrase', entry(['pip install is the command to run'])],
+    ['session-glued', entry(['xpip install is not a whole word'])],
   ])
   const matcher = buildMatcher('pip install', WHOLE_FLAGS)
   assert.equal(matcher.phrase('pip broke after the install script, so reinstall'), false)
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance', WHOLE_FLAGS)), [
-    'session-phrase',
-    'session-scattered',
-  ])
+  // Both words are present, but never adjacent: VS Code's whole-word toggle
+  // pins the ends of the literal query, it does not split it into keywords.
+  assert.equal(matcher.count('pip broke after the install script'), 0)
+  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance', WHOLE_FLAGS)), ['session-phrase'])
 })
 
 test('the phrase follows VS Code literal search: one contiguous string', () => {
