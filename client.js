@@ -470,19 +470,23 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Slide the excerpt window onto the first keyword so a one-line row shows
-		 * the match instead of the message opening.
+		 * Slide the excerpt window onto the match so a one-line row shows it
+		 * instead of the message opening. A phrase row keeps the phrase in view
+		 * even when an earlier single keyword appears in the lead-in.
 		 * @param text - plain-text excerpt, either side already elided.
 		 * @param tokens - keywords, longest first.
+		 * @param phrase - whether the row is there because the whole phrase matched.
 		 */
-		function focusExcerpt(text, tokens) {
+		function focusExcerpt(text, tokens, phrase = false) {
 			if (typeof text !== "string" || text === "") return "";
 			const flat = text.replaceAll("**", "").replaceAll("`", "");
 			const lower = flat.toLowerCase();
-			let index = -1;
-			for (const token of tokens) {
-				const hit = lower.indexOf(token.toLowerCase());
-				if (hit !== -1 && (index === -1 || hit < index)) index = hit;
+			let index = phrase === true && tokens.length > 1 ? lower.indexOf(tokens.join(" ").toLowerCase()) : -1;
+			if (index === -1) {
+				for (const token of tokens) {
+					const hit = lower.indexOf(token.toLowerCase());
+					if (hit !== -1 && (index === -1 || hit < index)) index = hit;
+				}
 			}
 			// A one-line row shows roughly its first two dozen characters, so the
 			// keyword has to land near the start or the clamp hides it.
@@ -996,7 +1000,7 @@ window.__ModuleLoader__.load({
 						h(
 							"span",
 							{ className: "shs-row-snippet" },
-							highlight(focusExcerpt(item.snippet, tokens), tokens),
+							highlight(focusExcerpt(item.snippet, tokens, item.phrase === true), tokens),
 						),
 						h(
 							"span",
@@ -1119,7 +1123,7 @@ window.__ModuleLoader__.load({
 										h(
 											"span",
 											{ className: "shs-row-snippet" },
-											highlight(focusExcerpt(hit.snippet, tokens), tokens),
+											highlight(focusExcerpt(hit.snippet, tokens, hit.phrase === true), tokens),
 										),
 										h(
 											"span",

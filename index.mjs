@@ -435,6 +435,20 @@ function buildMatcher(query, options) {
           options.caseSensitive ? 'u' : 'iu',
         )
       : null
+  /**
+   * Where the whole query phrase starts in an already folded body, or -1.
+   * Single-keyword queries have no phrase: the keyword is the phrase.
+   * @param {string} body - folded text.
+   * @returns {number} index of the phrase, or -1.
+   */
+  const phraseAt = (body) => {
+    if (terms.length < 2) return -1
+    if (wholePhrasePattern !== null) {
+      const found = wholePhrasePattern.exec(body)
+      return found === null ? -1 : found.index
+    }
+    return body.indexOf(phraseText)
+  }
   return {
     regex: false,
     terms,
@@ -443,6 +457,10 @@ function buildMatcher(query, options) {
     highlightTokens,
     locate: (text) => {
       const body = fold(text)
+      // Open on the phrase, not on the first stray word: a message that says
+      // `pip -V` before `pip install` must still show `pip install`.
+      const at = phraseAt(body)
+      if (at !== -1) return { index: at, length: phraseText.length }
       let best = { index: -1, length: 0 }
       for (const term of terms) {
         const here = locateTerm(body, term)
@@ -469,7 +487,7 @@ function buildMatcher(query, options) {
       const body = fold(text)
       if (terms.length === 0) return false
       if (terms.length === 1) return locateTerm(body, terms[0]) !== -1
-      return wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
+      return phraseAt(body) !== -1
     },
     analyze: (text) => {
       const body = fold(text)
@@ -486,8 +504,7 @@ function buildMatcher(query, options) {
       for (const term of negatives) if (locateTerm(body, term) !== -1) negative += 1
       if (matched === 0) return { matched: 0, exact: false, chars: 0, indexes, negative }
       if (terms.length === 1) return { matched: 1, exact: true, chars: phraseText.length, indexes, negative }
-      const exact =
-        wholePhrasePattern === null ? body.indexOf(phraseText) !== -1 : wholePhrasePattern.test(body)
+      const exact = phraseAt(body) !== -1
       return { matched, exact, chars: exact ? phraseText.length : chars, indexes, negative }
     },
     requiresAllTerms: terms.length > 1,
@@ -565,6 +582,24 @@ function compareHits(left, right, sort = 'time') {
 }
 
 /**
+ * Match quality of one hit, best first: the phrase beats scattered words, more
+ * matching words beat fewer, and time only breaks ties. Independent of the
+ * requested order, because a row opens on its best hit whichever way Sessions
+ * are sorted.
+ * @param {object} left - hit.
+ * @param {object} right - hit.
+ * @returns {number} sort order.
+ */
+function compareQuality(left, right) {
+  if (left.exact !== right.exact) return left.exact ? -1 : 1
+  if (left.matched !== right.matched) return right.matched - left.matched
+  if (left.chars !== right.chars) return right.chars - left.chars
+  if (left.message.time !== right.message.time) return right.message.time - left.message.time
+  if (left.kind !== right.kind) return left.kind === 'input' ? -1 : 1
+  return right.message.seq - left.message.seq
+}
+
+/**
  * Collect the matching rows of one Session, in the requested order and capped
  * to the rows the Client shows. The counters used for ranking are taken across
  * every matching row, before the cap.
@@ -573,7 +608,7 @@ function compareHits(left, right, sort = 'time') {
  * @param {{ inputs: boolean, outputs: boolean }} fields - pools to search.
  * @param {(time: number) => boolean} inTime - time-window filter.
  * @param {'time' | 'relevance'} sort - requested order.
- * @returns {{ hits: object[], maxMatched: number, maxChars: number, newestTime: number, matchedTerms: number, excluded: boolean }} hits, ranking counters, and the !term verdict.
+ * @returns {{ hits: object[], best: object | null, maxMatched: number, maxChars: number, newestTime: number, matchedTerms: number, excluded: boolean }} hits in the requested order, the row's representative hit, ranking counters, and the !term verdict.
  */
 function collectHitsDetailed(entry, matcher, fields, inTime, sort = 'time') {
   const hits = []
@@ -599,8 +634,18 @@ function collectHitsDetailed(entry, matcher, fields, inTime, sort = 'time') {
   }
   if (fields.inputs === true) scan(entry.messages, 'input')
   if (fields.outputs === true) scan(entry.outputs ?? [], 'output')
+  let best = null
+  for (const hit of hits) if (best === null || compareQuality(hit, best) < 0) best = hit
   hits.sort((left, right) => compareHits(left, right, sort))
-  return { hits: hits.slice(0, MAX_GROUP_HITS), maxMatched, maxChars, newestTime, matchedTerms: seenTerms.size, excluded }
+  return {
+    hits: hits.slice(0, MAX_GROUP_HITS),
+    best,
+    maxMatched,
+    maxChars,
+    newestTime,
+    matchedTerms: seenTerms.size,
+    excluded,
+  }
 }
 
 /**
@@ -738,7 +783,7 @@ function searchCorpusIn(source, matcher, tokens, skip, fields, filter = {}) {
       sessionId,
       entry,
       hits: collected.hits,
-      best: collected.hits[0],
+      best: collected.best ?? collected.hits[0],
       maxMatched: collected.maxMatched,
       maxTerms: collected.matchedTerms,
       maxChars: collected.maxChars,

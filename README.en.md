@@ -66,7 +66,7 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | `.*` | Regular expression; the panel reports an invalid pattern |
 | Folder icon | Filter by workspace, multi-select |
 | List icon | Group by session, showing where each session matched |
-| Sort icon | Sort by time (default) or relevance. Time is purely chronological: Sessions by their newest match, messages inside a Session newest first; match quality never jumps the queue. Relevance compares how many query characters one message covers — a whole phrase covers all of them, scattered words only their own letters, repetition never adds up — and falls back to time |
+| Sort icon | Sort by time (default) or relevance. Time is purely chronological: Sessions by their newest match, messages inside a Session newest first; match quality never jumps the queue. Relevance compares how many query characters one message covers — a whole phrase covers all of them, scattered words only their own letters, repetition never adds up — and falls back to time |. Each row's excerpt and relevance badge come from the best-matching message of that Session, and the excerpt starts at the phrase, never at an earlier stray single keyword
 | Keyboard | `↑` `↓` move, `Enter` open, `Esc` close |
 | Click a result | Opens the session and highlights the first keyword; archived sessions are unarchived first |
 | Pagination | 24 per page, "Load more" at the bottom |

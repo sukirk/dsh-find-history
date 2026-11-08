@@ -267,3 +267,32 @@ test('relevanceOf is characters covered first, newest match second', () => {
   const newerNoise = { maxChars: 10, newestTime: 120 }
   assert.deepEqual(rankSessions([noise, newerNoise], 'relevance'), [newerNoise, noise])
 })
+
+test('the excerpt opens on the phrase, not on an earlier stray keyword', () => {
+  const matcher = buildMatcher('pip install', FLAGS)
+  const body = 'check python3 -m pip -V first\nthen python3 -m pip install transformers'
+  const spot = matcher.locate(body)
+  // The row is there because of `pip install`; opening the excerpt on the
+  // earlier `pip -V` hides the reason it matched at all.
+  assert.equal(spot.index, body.indexOf('pip install'))
+  assert.equal(spot.length, 'pip install'.length)
+})
+
+test('whole-word mode opens on the phrase too, skipping near misses', () => {
+  const matcher = buildMatcher('pip install', WHOLE_FLAGS)
+  const body = 'piper installs nothing; later pip install transformers'
+  assert.equal(matcher.locate(body).index, body.indexOf('pip install'))
+  assert.equal(matcher.phrase('piper installs nothing'), false)
+})
+
+test('a row shows the phrase hit even when a newer row only scatters the words', () => {
+  const corpus = new Map([
+    ['session-mixed', entry(['old note: pip install transformers', 'newer note about pip only'])],
+  ])
+  const session = search(corpus, 'pip install', 'time')[0]
+  // Time order lists the newest row first, so hits[0] is the weak one; the row
+  // must still describe the phrase hit or the badge and excerpt lie.
+  assert.equal(session.hits[0].exact, false)
+  assert.equal(session.best.exact, true)
+  assert.equal(session.best.message.text, 'old note: pip install transformers')
+})
