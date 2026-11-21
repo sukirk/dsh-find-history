@@ -49,11 +49,11 @@ window.__ModuleLoader__.load({
 		const ANSWER_CACHE_MAX = 40;
 		/** Below this the surface shows the hint instead of results. */
 		const MIN_QUERY_LENGTH = 1;
+		/** Same cap as the Host, so a long paste is visibly capped instead of silently cut. */
+		const MAX_QUERY_CHARS = 300;
 		/** Remembered keywords: ↑ pages through them one at a time. */
 		const HISTORY_MAX = 10;
 		const HISTORY_KEY = "dsh-find-history:queries.v1";
-		/** A keyword enters the history once its answer settled, so prefixes are not saved. */
-		const HISTORY_RECORD_MS = 1200;
 		/** Selectors into the shipped sidebar: hashed CSS-module names, matched by suffix. */
 		const HEADER_SELECTOR = '[class*="sectionHeader"]';
 		const SEARCH_SLOT_SELECTOR = '[class*="searchSlot"]';
@@ -170,9 +170,12 @@ window.__ModuleLoader__.load({
 			countSessions: "找到 {count} 个会话",
 			truncated: "共 {count} 个，显示前 {shown} 个",
 			noResults: "没有找到包含这些关键词的会话",
+			approximate: "没有精确结果，以下是近似匹配",
+			approximateHint: "没有精确结果时按查询片段的覆盖率放宽匹配",
+			truncatedQuery: "关键词超过 300 字符，已截断",
+			truncatedMessages: "部分超长消息只索引了头尾",
 			error: "搜索失败，请重试",
 			untitled: "未命名会话",
-			phraseMatch: "整句匹配",
 			searchLabel: "搜索：",
 			fieldInput: "输入",
 			fieldOutput: "输出",
@@ -190,6 +193,7 @@ window.__ModuleLoader__.load({
 			loadMore: "加载更多",
 			invalidRegex: "正则表达式无效",
 			groupCount: "{count} 条命中",
+			groupCountPartial: "{count} 条命中，显示前 {shown} 条",
 			clear: "清除关键词",
 			historyHint: "按 ↑ 回看最近搜过的关键词（最多 10 条）",
 			justNow: "刚刚",
@@ -210,9 +214,12 @@ window.__ModuleLoader__.load({
 			countSessions: "{count} conversations found",
 			truncated: "{count} found, showing the first {shown}",
 			noResults: "No conversation contains these keywords",
+			approximate: "No exact match; showing approximate matches",
+			approximateHint: "When nothing matches exactly, results are relaxed by how much of the query they carry",
+			truncatedQuery: "The query was cut to 300 characters",
+			truncatedMessages: "Some very long messages are indexed by their ends only",
 			error: "Search failed, please retry",
 			untitled: "Untitled conversation",
-			phraseMatch: "Phrase match",
 			searchLabel: "Search:",
 			fieldInput: "input",
 			fieldOutput: "answers",
@@ -230,6 +237,7 @@ window.__ModuleLoader__.load({
 			loadMore: "Load more",
 			invalidRegex: "Invalid regular expression",
 			groupCount: "{count} hits",
+			groupCountPartial: "{count} hits, showing the first {shown}",
 			historyHint: "Press ↑ to reuse a recent keyword (up to 10)",
 			clear: "Clear keywords",
 			justNow: "just now",
@@ -507,14 +515,16 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Wrap the keywords inside an excerpt so the match is visible.
+		 * Wrap the matched text inside an excerpt. The Host sends the exact
+		 * substring that matched (`focus`), which is also correct for regex and
+		 * relaxed hits where the query text is not present verbatim.
 		 * @param {string} text - plain-text excerpt.
-		 * @param {string[]} tokens - keywords, longest first.
+		 * @param {string} focus - matched substring, as it appears in the message.
 		 */
-		function highlight(text, tokens) {
-			if (typeof text !== "string" || text === "" || tokens.length === 0) return text;
-			const pattern = new RegExp(`(${tokens.map(escapeRegExp).join("|")})`, "giu");
-			const parts = text.split(pattern);
+		function highlight(text, focus) {
+			if (typeof text !== "string" || text === "") return text;
+			if (typeof focus !== "string" || focus === "") return text;
+			const parts = text.split(new RegExp(`(${escapeRegExp(focus)})`, "giu"));
 			return parts.map((part, index) =>
 				index % 2 === 1
 					? h("mark", { key: index, className: "shs-hit" }, part)
@@ -524,23 +534,15 @@ window.__ModuleLoader__.load({
 
 		/**
 		 * Slide the excerpt window onto the match so a one-line row shows it
-		 * instead of the message opening. A phrase row keeps the phrase in view
-		 * even when an earlier single keyword appears in the lead-in.
+		 * instead of the message opening.
 		 * @param text - plain-text excerpt, either side already elided.
-		 * @param tokens - keywords, longest first.
-		 * @param phrase - whether the row is there because the whole phrase matched.
+		 * @param focus - matched substring, as it appears in the message.
 		 */
-		function focusExcerpt(text, tokens, phrase = false) {
+		function focusExcerpt(text, focus) {
 			if (typeof text !== "string" || text === "") return "";
+			if (typeof focus !== "string" || focus === "") return text;
 			const flat = text.replaceAll("**", "").replaceAll("`", "");
-			const lower = flat.toLowerCase();
-			let index = phrase === true && tokens.length > 1 ? lower.indexOf(tokens.join(" ").toLowerCase()) : -1;
-			if (index === -1) {
-				for (const token of tokens) {
-					const hit = lower.indexOf(token.toLowerCase());
-					if (hit !== -1 && (index === -1 || hit < index)) index = hit;
-				}
-			}
+			const index = flat.toLowerCase().indexOf(focus.toLowerCase());
 			// A one-line row shows roughly its first two dozen characters, so the
 			// keyword has to land near the start or the clamp hides it.
 			if (index <= 8) return flat;
@@ -662,6 +664,8 @@ window.__ModuleLoader__.load({
 				});
 				const [result, setResult] = useState({
 					query: "",
+					mode: "exact",
+					truncated: false,
 					items: [],
 					matched: 0,
 					total: 0,
@@ -709,9 +713,9 @@ window.__ModuleLoader__.load({
 				}, []);
 
 				/**
-				 * Add one keyword to the front of the history, deduplicated and capped.
-				 * A keyword is remembered only after its answer settled, so the list
-				 * holds what was searched rather than every intermediate keystroke.
+				 * Add one committed keyword to the front of the history, deduplicated
+				 * and capped. Only close/Enter call this, so the list holds queries
+				 * the user actually ran, not intermediate keystrokes.
 				 * @param {string} needle - the keyword to remember.
 				 */
 				const rememberQuery = useCallback((needle) => {
@@ -720,8 +724,6 @@ window.__ModuleLoader__.load({
 					const text = needle.trim();
 					if (text === "") return;
 					const current = historyRef.current;
-					// Shortening the newest keyword back to a prefix of it is not a new search.
-					if (current[0] !== undefined && current[0] !== text && current[0].startsWith(text)) return;
 					const next = [text, ...current.filter((item) => item !== text)].slice(0, HISTORY_MAX);
 					if (next.length === current.length && next.every((item, index) => item === current[index])) return;
 					historyRef.current = next;
@@ -804,10 +806,9 @@ window.__ModuleLoader__.load({
 						const items = Array.isArray(payload.items) ? payload.items : [];
 						const answer = {
 							query: needle,
+							mode: payload.mode === "approximate" ? "approximate" : "exact",
+							truncated: payload.truncated === true,
 							items,
-							// Chunked fallback matches narrower keywords than the user typed,
-							// so highlighting follows the Host instead of the raw query.
-							tokens: Array.isArray(payload.tokens) ? payload.tokens : [],
 							matched: Number.isFinite(payload.matched) ? payload.matched : 0,
 							total: Number.isFinite(payload.total) ? payload.total : items.length,
 							pending: Number.isFinite(payload.pending) ? payload.pending : 0,
@@ -880,16 +881,6 @@ window.__ModuleLoader__.load({
 					}, PENDING_POLL_MS);
 					return () => clearTimeout(timer);
 				}, [open, status, result.pending, result.query, fields, matchers, shape]);
-
-				// Remember the keyword once its answer has settled: history then holds
-				// what was searched, not every intermediate keystroke.
-				useEffect(() => {
-					if (!open || status !== "ready") return undefined;
-					const settled = query.trim();
-					if (settled === "" || result.query !== settled) return undefined;
-					const timer = setTimeout(() => rememberQuery(settled), HISTORY_RECORD_MS);
-					return () => clearTimeout(timer);
-				}, [open, status, query, result.query, rememberQuery]);
 
 				// Clicking anywhere else dismisses the options popover.
 				useEffect(() => {
@@ -1019,13 +1010,9 @@ window.__ModuleLoader__.load({
 					const list = historyRef.current;
 					if (list.length === 0) return false;
 					if (historyIndexRef.current === -1) {
-						// ↑ from the keyword just searched would show it again; start at the
-						// previous one instead, so the first press always moves somewhere.
-						const start = list[0] === queryRef.current.trim() ? 1 : 0;
-						if (start >= list.length) return false;
 						draftRef.current = queryRef.current;
-						historyIndexRef.current = start;
-						setQuery(list[start]);
+						historyIndexRef.current = 0;
+						setQuery(list[0]);
 						setCursor(0);
 						return true;
 					}
@@ -1044,14 +1031,14 @@ window.__ModuleLoader__.load({
 					return true;
 				};
 
-				const openSession = async (item) => {
+				const openSession = async (item, hit) => {
 					const uiWorkspace = service("uiWorkspace");
 					if (uiWorkspace === undefined || uiWorkspace === null) return;
-					const needle = result.query.trim().split(/\s+/u)[0] ?? "";
+					const needle = (hit ?? item).focus ?? item.focus ?? result.query.trim();
 					try {
 						uiWorkspace.openSession(item.sessionId);
 						close();
-						if (!matchers.regex) revealHit(needle);
+						if (needle !== "") revealHit(needle);
 					} catch (failure) {
 						setError(failure instanceof Error ? failure : new Error(String(failure)));
 						setStatus("error");
@@ -1126,23 +1113,6 @@ window.__ModuleLoader__.load({
 					);
 				}, [result.items, t]);
 
-				const tokens = useMemo(() => {
-					const fromServer =
-						result.query === query.trim() && Array.isArray(result.tokens)
-							? result.tokens
-							: [];
-					const unique = [];
-					const seen = new Set();
-					for (const token of fromServer.length > 0 ? fromServer : query.trim().split(/\s+/u)) {
-						if (token === "") continue;
-						const key = token.toLowerCase();
-						if (seen.has(key)) continue;
-						seen.add(key);
-						unique.push(token);
-					}
-					return unique.sort((left, right) => right.length - left.length);
-				}, [query, result.query, result.tokens]);
-
 				/** One timeline row: Session title, why it matched, and its metadata. */
 				const HIGHLIGHT_NAME = "dsh-shs-hit";
 
@@ -1192,6 +1162,7 @@ window.__ModuleLoader__.load({
 					setTip({
 						left,
 						top,
+						focus: item.focus ?? "",
 						head: item.head ?? "",
 						match: item.match ?? "",
 						tail: item.tail ?? (item.head === undefined ? (item.snippet ?? "") : ""),
@@ -1215,7 +1186,7 @@ window.__ModuleLoader__.load({
 						h(
 							"span",
 							{ className: "shs-row-snippet" },
-							highlight(focusExcerpt(item.snippet, tokens, item.phrase === true), tokens),
+							highlight(focusExcerpt(item.snippet, item.focus), item.focus),
 						),
 						h(
 							"span",
@@ -1234,7 +1205,9 @@ window.__ModuleLoader__.load({
 									)
 								: null,
 							h("span", null, formatAge(item.time, t)),
-							item.phrase === true ? h("span", { className: "shs-badge" }, t("phraseMatch")) : null,
+							item.coverage < 1
+								? h("span", { className: "shs-badge", title: t("approximateHint") }, `≈${Math.round(item.coverage * 100)}%`)
+								: null,
 						),
 					);
 
@@ -1289,6 +1262,14 @@ window.__ModuleLoader__.load({
 								: t(shape.group ? "count" : "countSessions", { count: result.total }),
 						);
 					}
+					if (result.mode === "approximate") parts.push(t("approximate"));
+					if (result.truncated) parts.push(t("truncatedQuery"));
+					const hasTruncatedMessage = result.items.some(
+						(item) =>
+							item.truncated === true ||
+							(Array.isArray(item.hits) && item.hits.some((hit) => hit.truncated === true)),
+					);
+					if (hasTruncatedMessage) parts.push(t("truncatedMessages"));
 					if (result.pending > 0) parts.push(t("building", { count: result.pending }));
 					statusLine = h("div", { className: "shs-status" }, parts.join(" \u00b7 "));
 				}
@@ -1329,7 +1310,13 @@ window.__ModuleLoader__.load({
 										? null
 										: h("span", { className: "shs-badge" }, item.workspaceTitle),
 									h("span", { className: "shs-spacer" }),
-									h("span", null, t("groupCount", { count: item.hits.length })),
+									h(
+										"span",
+										null,
+										item.hits.length < (item.totalHits ?? item.hits.length)
+											? t("groupCountPartial", { shown: item.hits.length, count: item.totalHits })
+											: t("groupCount", { count: item.totalHits ?? item.hits.length }),
+									),
 								),
 								item.hits.map((hit) =>
 									h(
@@ -1340,12 +1327,12 @@ window.__ModuleLoader__.load({
 											className: "shs-row",
 											onMouseEnter: (event) => showTip(event, hit),
 											onMouseLeave: hideTip,
-											onClick: () => void openSession(item),
+											onClick: () => void openSession(item, hit),
 										},
 										h(
 											"span",
 											{ className: "shs-row-snippet" },
-											highlight(focusExcerpt(hit.snippet, tokens, hit.phrase === true), tokens),
+											highlight(focusExcerpt(hit.snippet, hit.focus), hit.focus),
 										),
 										h(
 											"span",
@@ -1354,8 +1341,8 @@ window.__ModuleLoader__.load({
 												? h("span", { className: "shs-badge" }, t("kindOutput"))
 												: null,
 											h("span", null, formatAge(hit.time, t)),
-											hit.phrase === true
-												? h("span", { className: "shs-badge" }, t("phraseMatch"))
+											hit.coverage < 1
+												? h("span", { className: "shs-badge", title: t("approximateHint") }, `≈${Math.round(hit.coverage * 100)}%`)
 												: null,
 										),
 									),
@@ -1452,6 +1439,7 @@ window.__ModuleLoader__.load({
 										"aria-label": t("dialogTitle"),
 										autoComplete: "off",
 										spellCheck: false,
+										maxLength: MAX_QUERY_CHARS,
 										tabIndex: open ? 0 : -1,
 										onChange: (event) => editQuery(event.target.value),
 										onKeyDown,
@@ -1625,9 +1613,9 @@ window.__ModuleLoader__.load({
 												h(
 													"div",
 													{ className: "shs-tip-body" },
-													tip.head === "" ? null : highlight(tip.head, tokens),
+													tip.head === "" ? null : highlight(tip.head, tip.focus),
 													tip.match === "" ? null : h("mark", { className: "shs-hit" }, tip.match),
-													tip.tail === "" ? null : highlight(tip.tail, tokens),
+													tip.tail === "" ? null : highlight(tip.tail, tip.focus),
 												),
 											),
 								),

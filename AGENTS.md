@@ -12,14 +12,15 @@
 
 | 位置 | 作用 |
 | --- | --- |
-| `index.mjs` | 路由与鉴权、查询解析（`parseQueryParts` / `buildMatcher`）、排序（`rankSessions` / `relevanceOf`）、结果组装、增量巡检、事件监听、语料缓存 |
+| `index.mjs` | 路由与鉴权、匹配器（`buildMatcher` / `buildApproximateMatcher` / `searchWithRelaxation`）、排序（`rankSessions` / `relevanceOf`）、结果组装、增量巡检、事件监听、语料缓存 |
 | `scan.mjs` | 逐 zstd frame 解压 Session 日志（`MAX_MESSAGE_CHARS` 截断），抽出用户消息与每轮收尾回答 |
 | `store.mjs` | 每个 Session 一个语料文档（`DOC_VERSION`），记录日志路径、大小、mtime 与已读偏移；`indexPaths` 把缓存根解析到 `$DSH_HOME/cache/find-history/` |
 | `backfill.mjs` | 冷启动子进程入口：`node backfill.mjs <docs> <cache root> <JSON batch>`，批次结束即退出 |
 | `client.js` | 预构建客户端：侧边栏按钮、标题行内联搜索框（与内置搜索同样的展开动画）、结果列表、悬停预览、续聊跳转 |
 | `locale/zh.json`、`locale/en.json` | 插件元信息文案 |
 | `test/ranking.test.mjs` | `node:test`，直接测匹配器、命中收集、排序、语料搜索 |
-| `test/search-behavior.test.mjs` | 检索行为规格：大小写 / 整词（ASCII 边界 + 中文子串）/ 多关键词 / 引号 / 排除 / 正则 / 切分重试的允许条件，含与独立边界实现的差分测试 |
+| `test/search-behavior.test.mjs` | 检索行为规格：字面量语义 / 大小写 / 整词（ASCII 边界 + 中文子串）/ 正则 / n-gram 近似与自动放宽，含与独立边界实现的差分测试 |
+| `test/search-acceptance.test.mjs` | 验收语料：20 条长度 2–10 的查询，核对精确/近似、时间序、相关性序、大小写/整词/正则变体 |
 
 ## 构建与验证
 
@@ -28,13 +29,14 @@ npm test                                   # node --test，跑 test/ 下全部�
 node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 ```
 
-没有打包步骤：`client.js` 是直接维护的 `__ModuleLoader__` bundle，改完刷新页面生效。真实回归需要运行中的 DSH：在侧边栏点搜索图标，搜一个你确定说过的词，确认能点回会话；再搜中文连写词确认切分重试逻辑。
+没有打包步骤：`client.js` 是直接维护的 `__ModuleLoader__` bundle，改完刷新页面生效。真实回归需要运行中的 DSH：在侧边栏点搜索图标，搜一个你确定说过的词，确认能点回会话；再搜一个只在标题里被拆开出现的中文词，确认结果被标为“近似匹配”且行内有覆盖率。
 
 ## 维护规则
 
 - 鉴权顺序别改：`handleSearch` 先校验方法是 GET，再 `ctx.connection.authorizeIndex(req, res)`，然后才解析查询；路由是 exact，拿不到 `/api` 的 body 上限，读请求本身没有 body。
-- 查询语法改动必须同时覆盖 `parseQueryParts`（引号短语、`!` 排除）、`buildMatcher`（正则/整词/大小写）、`chunkKeywords`（4 字以上中文按两字切分）和 `chunkRetryPlan`（决定能不能切分重试；整词/引号/排除/正则/多关键词都不允许），并在 `test/ranking.test.mjs` 或 `test/search-behavior.test.mjs` 补用例。
-- 响应字段是客户端契约：`query`、`tokens`、`limit`、`offset`、`total`、`matched`、`pending`、`group`、`workspaces`、`items`；`items` 的 `sessionId` / `title` / `cwd` / `workspaceId` / `workspaceTitle` 与 `snippet` / `head` / `match` / `tail` / `time` / `seq` / `kind` 不要随意改名。
+- 查询语义对齐 VS Code：整段输入是一个字面量，空格/引号/`!` 是数据；`Aa` / `ab` / `.*` 只影响大小写、ASCII 词边界和正则。不要重新引入 AND、引号短语或 `!` 排除。
+- 改动匹配器需同时覆盖 `buildMatcher`（literal/regex）、`findWholeFrom`（ASCII 边界）、`buildApproximateMatcher` + `queryUnits`/`scanUnits`（自动放宽，覆盖率和 60% 阈值）与 `searchWithRelaxation`（仅在无精确结果、非整词、非正则时启用），并在 `test/search-behavior.test.mjs` / `test/search-acceptance.test.mjs` 补用例。
+- 响应字段是客户端契约：`query`、`mode`、`truncated`、`limit`、`offset`、`total`、`matched`、`pending`、`group`、`workspaces`、`items`；`items` 的 `sessionId` / `title` / `cwd` / `workspaceId` / `workspaceTitle` 与 `snippet` / `head` / `match` / `tail` / `time` / `seq` / `kind` / `focus` / `coverage` / `truncated`，分组时还有 `totalHits` / `hits`。客户端高亮与跳转依赖 `focus`，不要改成语义字符串。
 - 语料文档格式变了必须 bump `DOC_VERSION`：旧文档会被当成空语料重建，不要写兼容旧格式的代码。
 - 缓存路径只能通过 `ctx.get('dshHomePath')('cache', …)` 解析，不要手拼 `~/.dsh`；拿不到缓存目录时让插件空跑，不要抛错影响 DSH 启动。
 - 事件监听（`session/created`、`session/event`、`session/disposed`）与定时器都要在 dispose 里清掉，`corpus` 不能留在模块级内存里；归档会话通过 `workspaceRegistry.archivedSessionIds` 跳过。
@@ -46,7 +48,7 @@ node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 
 ## 常见修改
 
-- **加筛选参数**：`readX` 解析 + 传给 `searchCorpus` 的 `filter`，再在 `client.js` 的搜索面加控件，最后补 README 参数表。
+- **加筛选参数**：`readX` 解析 + 传给 `searchCorpusIn` 的 `filter`，再在 `client.js` 的搜索面加控件，最后补 README 参数表。
 - **改排序**：`relevanceOf` / `compareHits` / `rankSessions`，同步 `test/ranking.test.mjs`。
 - **改语料抽取**：`scan.mjs` 的 `readMessageText` / `readAssistantText`；注意保留「同一轮只留最后一条回答」的语义。
 - **改入口位置**：`client.js` 里的 portal 与 class 后缀选择器，别引入构建步骤。
@@ -56,5 +58,5 @@ node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 
 - `npm test` 与 `node --check` 全部通过；
 - 手工验证：入口出现在侧边栏标题行、中英文关键词都能命中、点结果能进入对应会话、清空后恢复原会话列表；
-- 改动涉及查询语法或排序时，`test/ranking.test.mjs` / `test/search-behavior.test.mjs` 有新用例；
+- 改动涉及查询语义或排序时，`test/ranking.test.mjs` / `test/search-behavior.test.mjs` / `test/search-acceptance.test.mjs` 有新用例；
 - README 的参数表、响应字段、边界与实现一致；没有改动宿主的 `sessionQuery` 行。

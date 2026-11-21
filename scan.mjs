@@ -125,6 +125,7 @@ function commitOutput(state) {
     time: pending.time,
     text: pending.text,
     lower: pending.lower,
+    truncated: pending.truncated === true,
   })
 }
 
@@ -161,8 +162,10 @@ function applyEvent(state, event) {
   }
   if (event.type === 'assistant/message') {
     const turn = Number.isFinite(event.data?.turn) ? event.data.turn : state.turn
-    const text = capMessageText(readAssistantText(event.data))
+    const raw = readAssistantText(event.data)
+    const text = capMessageText(raw)
     if (text === '') return
+    const truncated = text !== raw
     // Every step of a turn writes its own assistant message; only the last one
     // carries the answer, so an earlier step's text is replaced, not appended.
     if (state.pending !== null && state.pending.turn === turn) {
@@ -170,6 +173,7 @@ function applyEvent(state, event) {
       state.pending.time = Number.isFinite(event.time) ? event.time : state.pending.time
       state.pending.text = text
       state.pending.lower = text.toLowerCase()
+      state.pending.truncated = truncated
       return
     }
     commitOutput(state)
@@ -179,6 +183,7 @@ function applyEvent(state, event) {
       time: Number.isFinite(event.time) ? event.time : 0,
       text,
       lower: text.toLowerCase(),
+      truncated,
     }
     return
   }
@@ -195,6 +200,7 @@ function applyEvent(state, event) {
     time: Number.isFinite(event.time) ? event.time : 0,
     text: capped,
     lower: capped.toLowerCase(),
+    truncated: capped !== text,
   })
 }
 

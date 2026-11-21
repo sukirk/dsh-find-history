@@ -1,14 +1,10 @@
-// Ranking tests for the two sort orders.
-//
-// The Host answers two questions: which Sessions contain the words the user
-// typed, and in what order. `time` is purely chronological. `relevance` first
-// compares how many query characters one message covers -- a phrase covers all
-// of them, a scattered word only its own letters -- and breaks ties by time.
-// Repetition never adds up, so six `install` rows cannot outrank one
-// `pip install` row. These tests pin that down without starting a Harness.
+// Ordering tests for the literal search model: time is purely chronological;
+// relevance ranks by coverage of the best hit, then how often the query occurs
+// in the Session, then recency.
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildApproximateMatcher,
   buildMatcher,
   collectHits,
   compareHits,
@@ -17,324 +13,131 @@ import {
   searchCorpusIn,
 } from '../index.mjs'
 
-const FLAGS = { caseSensitive: false, whole: false, regex: false }
-const WHOLE_FLAGS = { caseSensitive: false, whole: true, regex: false }
+const PLAIN = { caseSensitive: false, whole: false, regex: false }
+const REGEX = { caseSensitive: false, whole: false, regex: true }
+const INPUT = { inputs: true, outputs: false }
 
-/** One corpus entry with one user row per text, oldest first. */
-function entry(texts, base = 1000) {
+/** One corpus entry with one user row per [time, text]. */
+function entry(rows) {
   return {
-    messages: texts.map((text, index) => ({
-      seq: index + 1,
-      time: base + index,
-      text,
-      lower: text.toLowerCase(),
-    })),
+    messages: rows.map(([time, text], index) => ({ seq: index + 1, time, text })),
     outputs: [],
   }
 }
 
-/** Session ids in the order the search returned them. */
+/** Session ids in result order. */
 function ids(sessions) {
   return sessions.map((session) => session.sessionId)
 }
 
-/** Search a private corpus with the same arguments the route uses. */
-function search(corpus, query, sort, flags = FLAGS) {
-  const matcher = buildMatcher(query, flags)
-  return searchCorpusIn(corpus, matcher, matcher.terms, new Set(), { inputs: true, outputs: false }, { sort })
+/** Search a private corpus. */
+function search(corpus, matcher, filter = { sort: 'time' }) {
+  return searchCorpusIn(corpus, matcher, new Set(), INPUT, filter)
 }
 
-test('a Session without every keyword drops out, the way VS Code AND search works', () => {
+test('time sort is purely the newest matching message', () => {
   const corpus = new Map([
-    ['session-phrase', entry(['first run pip install transformers'])],
-    [
-      'session-install',
-      entry([
-        'install the wheel',
-        'install the runtime',
-        'install the CLI',
-        'install the plugin',
-        'install the docs',
-        'install the desktop app',
-      ]),
-    ],
-    ['session-pip', entry(['pip is short for pip3'])],
+    ['once', entry([[5000, 'needle here']])],
+    ['thrice', entry([[1000, 'needle needle needle']])],
+    ['twice', entry([[3000, 'needle needle']])],
   ])
-  // "pip install" asks for both terms: a Session that only repeats one of them
-  // is not a result at all, so no amount of repetition can outrank the phrase.
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase'])
+  const sessions = search(corpus, buildMatcher('needle', PLAIN))
+  assert.deepEqual(ids(sessions), ['once', 'twice', 'thrice'])
 })
 
-test('whole-word mode keeps the query contiguous, like VS Code', () => {
+test('relevance puts more occurrences first, then the newer Session', () => {
   const corpus = new Map([
-    ['session-scattered', entry(['pip broke after the install script, so reinstall'])],
-    ['session-phrase', entry(['pip install is the command to run'])],
-    ['session-glued', entry(['xpip install is not a whole word'])],
+    ['once', entry([[5000, 'needle here']])],
+    ['thrice', entry([[1000, 'needle needle needle']])],
+    ['twice', entry([[3000, 'needle needle']])],
   ])
-  const matcher = buildMatcher('pip install', WHOLE_FLAGS)
-  assert.equal(matcher.phrase('pip broke after the install script, so reinstall'), false)
-  // Both words are present, but never adjacent: VS Code's whole-word toggle
-  // pins the ends of the literal query, it does not split it into keywords.
-  assert.equal(matcher.count('pip broke after the install script'), 0)
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance', WHOLE_FLAGS)), ['session-phrase'])
+  const sessions = search(corpus, buildMatcher('needle', PLAIN), { sort: 'relevance' })
+  assert.deepEqual(ids(sessions), ['thrice', 'twice', 'once'])
+  assert.deepEqual(relevanceOf(sessions[0]), [1, 3, 1000])
 })
 
-test('the phrase follows VS Code literal search: one contiguous string', () => {
-  const matcher = buildMatcher('pip install', FLAGS)
-  assert.equal(matcher.phrase('run pip install transformers'), true)
-  // VS Code's plain search does not match a line break or a second space for
-  // the space in the query, and it happily matches inside a longer word.
-  assert.equal(matcher.phrase('run pip\ninstall transformers'), false)
-  assert.equal(matcher.phrase('run pip  install transformers'), false)
-  assert.equal(matcher.phrase('pip, then install'), false)
-  assert.equal(matcher.phrase('pip installer'), true)
-})
-
-test('whole word only adds boundaries around the phrase ends', () => {
-  const wholeMatcher = buildMatcher('pip install', WHOLE_FLAGS)
-  assert.equal(wholeMatcher.phrase('x pip install y'), true)
-  assert.equal(wholeMatcher.phrase('pip installs here'), false)
-  assert.equal(wholeMatcher.phrase('pip installer'), false)
-  assert.equal(wholeMatcher.phrase('run pip\ninstall transformers'), false)
-  assert.equal(wholeMatcher.phrase('piper installs things'), false)
-})
-
-test('whole word leaves Chinese keywords alone, because Chinese has no word boundaries', () => {
-  // The reported regression: 「历史搜索」 matched as a substring, then vanished
-  // as soon as the whole-word toggle went on, because 话 and 插 around it were
-  // read as word characters. Chinese prose has no spaces, so a Chinese edge
-  // must not require a boundary.
-  const matcher = buildMatcher('历史搜索', WHOLE_FLAGS)
-  assert.equal(matcher.find('我打算把这个会话历史搜索插件开源到 github') > -1, true)
-  assert.equal(matcher.find('关于会话历史搜索 / Session History Search 的讨论') > -1, true)
-  assert.equal(matcher.phrase('会话历史搜索插件'), true)
-})
-
-test('whole-word mode still finds a Chinese keyword, like the substring search does', () => {
+test('relevance uses coverage first for relaxed matches', () => {
   const corpus = new Map([
-    ['session-embedded', entry(['我打算把这个会话历史搜索插件开源到 github'], 500)],
-    ['session-spaced', entry(['关于 历史搜索 的讨论'], 1500)],
+    ['low-newer', entry([[5000, '炒股与界面']])],
+    ['high-older', entry([[1000, '炒股股界界面']])],
   ])
-  assert.deepEqual(ids(search(corpus, '历史搜索', 'relevance', WHOLE_FLAGS)), [
-    'session-spaced',
-    'session-embedded',
-  ])
+  const matcher = buildApproximateMatcher('炒股界面', PLAIN)
+  const sessions = search(corpus, matcher, { sort: 'relevance' })
+  assert.deepEqual(ids(sessions), ['high-older', 'low-newer'])
+  assert.equal(sessions[0].maxCoverage, 1)
+  assert.equal(sessions[1].maxCoverage, 2 / 3)
+  // Pure time order still honours the clock.
+  assert.deepEqual(ids(search(corpus, matcher)), ['low-newer', 'high-older'])
 })
 
-test('whole word still pins the ASCII edges of a keyword inside Chinese prose', () => {
-  const matcher = buildMatcher('pip', WHOLE_FLAGS)
-  assert.equal(matcher.find('用pip安装依赖'), 1)
-  assert.equal(matcher.find('pip 安装'), 0)
-  assert.equal(matcher.find('运行pip3'), -1)
-  assert.equal(matcher.find('xpip install'), -1)
-})
-
-test('a mixed keyword only pins its ASCII edge', () => {
-  const matcher = buildMatcher('搜索api', WHOLE_FLAGS)
-  assert.equal(matcher.find('历史搜索api文档'), 2)
-  assert.equal(matcher.find('历史搜索apidoc'), -1)
-})
-
-test('whole-word regex keeps Chinese substrings too', () => {
-  const matcher = buildMatcher('历史搜索', { ...WHOLE_FLAGS, regex: true })
-  assert.equal(matcher.find('会话历史搜索插件') > -1, true)
-  assert.equal(matcher.find('历史搜索 插件'), 0)
-})
-
-test('repeated spaces are word separators, like VS Code; quotes keep a phrase literal', () => {
-  // Outside quotes VS Code splits on any whitespace run, so a double space is
-  // the same two keywords as a single space.
-  const spaced = buildMatcher('pip  install', FLAGS)
-  assert.deepEqual(spaced.terms, ['pip', 'install'])
-  assert.equal(spaced.phrase('pip install'), true)
-  // Inside double quotes the spaces stay literal, so the phrase is one term.
-  const quoted = buildMatcher('"pip  install"', FLAGS)
-  assert.deepEqual(quoted.terms, ['pip  install'])
-  assert.equal(quoted.phrase('pip install'), false)
-  assert.equal(quoted.phrase('run pip  install now'), true)
-})
-
-test('a quoted phrase combines with other terms, like VS Code', () => {
-  const matcher = buildMatcher('"pip install" transformers', FLAGS)
-  assert.equal(matcher.requiresAllTerms, true)
-  const row = { seq: 1, time: 1, text: 'pip install transformers', lower: '' }
-  const other = { seq: 2, time: 2, text: 'pip installer transformers', lower: '' }
-  assert.equal(matcher.count(row.text), 2)
-  assert.equal(matcher.phrase(row.text), true)
-  // "pip installer" contains "pip install" literally, but the quoted phrase is
-  // still one positive term; only the transcript decides which rows show up.
-  assert.equal(matcher.count(other.text), 2)
-  // The positive text only counts as one phrase when it appears contiguously.
-  assert.equal(matcher.phrase(other.text), false)
-})
-
-test('a leading ! excludes a keyword anywhere in the Session', () => {
+test('the representative hit follows the requested order', () => {
   const corpus = new Map([
-    ['session-good', entry(['pip install the wheel'])],
-    ['session-bad', entry(['pip install the wheel', 'then transformers broke'])],
+    ['session', entry([[1000, 'needle needle'], [5000, 'needle']])],
   ])
-  const matcher = buildMatcher('pip install !transformers', FLAGS)
-  assert.equal(matcher.negatives.length, 1)
-  assert.deepEqual(ids(searchCorpusIn(corpus, matcher, matcher.highlightTokens, new Set(), { inputs: true, outputs: false }, { sort: 'relevance' })), ['session-good'])
+  // Time order opens on the newest hit; the row is not allowed to jump back.
+  const [byTime] = search(corpus, buildMatcher('needle', PLAIN))
+  assert.equal(byTime.best.message.time, 5000)
+  // Relevance counts occurrences, so the older denser hit represents the row.
+  const [byRelevance] = search(corpus, buildMatcher('needle', PLAIN), { sort: 'relevance' })
+  assert.equal(byRelevance.best.message.time, 1000)
+  assert.equal(byRelevance.best.occurrences, 2)
+  assert.equal(byRelevance.totalOccurrences, 3)
 })
 
-test('a negated quoted phrase excludes the whole literal phrase', () => {
+test('grouped rows keep every counter before the display cap', () => {
+  const rows = Array.from({ length: 8 }, (_, index) => [1000 + index, 'needle'])
+  const corpus = new Map([['chatty', entry(rows)]])
+  const [session] = search(corpus, buildMatcher('needle', PLAIN))
+  assert.equal(session.totalHits, 8)
+  assert.equal(session.hits.length, 6)
+  assert.equal(session.totalOccurrences, 8)
+})
+
+test('regex mode counts occurrences for relevance', () => {
   const corpus = new Map([
-    ['session-good', entry(['pip install went fine today'])],
-    ['session-bad', entry(['pip install went fine', 'the quick pip install broke again'])],
+    ['many', entry([[1000, 'a a a']])],
+    ['few', entry([[5000, 'a']])],
   ])
-  const matcher = buildMatcher('pip !"quick pip install"', FLAGS)
-  assert.deepEqual(matcher.negatives, ['quick pip install'])
+  const matcher = buildMatcher('a', REGEX)
+  assert.deepEqual(ids(search(corpus, matcher)), ['few', 'many'])
+  assert.deepEqual(ids(search(corpus, matcher, { sort: 'relevance' })), ['many', 'few'])
+})
+
+test('hits inside one Session honour the requested order', () => {
+  const corpus = new Map([['session', entry([[1000, 'needle'], [3000, 'needle needle'], [2000, 'needle']])]])
+  const [session] = search(corpus, buildMatcher('needle', PLAIN))
+  const timeHits = collectHits(corpus.get('session'), buildMatcher('needle', PLAIN), INPUT, 'time')
+  assert.deepEqual(timeHits.map((hit) => hit.message.time), [3000, 2000, 1000])
+  const relevanceHits = collectHits(corpus.get('session'), buildMatcher('needle', PLAIN), INPUT, 'relevance')
+  assert.deepEqual(relevanceHits.map((hit) => hit.message.time), [3000, 2000, 1000])
+})
+
+test('compareHits orders by coverage, occurrences and time', () => {
+  const make = (time, occurrences, coverage) => ({ message: { time, seq: 1 }, kind: 'input', occurrences, coverage })
+  const hits = [
+    make(5000, 1, 1),
+    make(1000, 3, 1),
+    make(3000, 2, 1),
+  ]
+  assert.deepEqual(hits.sort((a, b) => compareHits(a, b, 'time')).map((hit) => hit.message.time), [5000, 3000, 1000])
+  assert.deepEqual(hits.sort((a, b) => compareHits(a, b, 'relevance')).map((hit) => hit.message.time), [1000, 3000, 5000])
+})
+
+test('rankSessions orders in place and breaks ties by id', () => {
+  const sessions = [
+    { sessionId: 'b', newestTime: 1000, maxCoverage: 1, totalOccurrences: 1 },
+    { sessionId: 'a', newestTime: 1000, maxCoverage: 1, totalOccurrences: 1 },
+    { sessionId: 'c', newestTime: 2000, maxCoverage: 1, totalOccurrences: 1 },
+  ]
+  assert.deepEqual(rankSessions(sessions, 'time').map((session) => session.sessionId), ['c', 'a', 'b'])
   assert.deepEqual(
-    ids(
-      searchCorpusIn(
-        corpus,
-        matcher,
-        matcher.highlightTokens,
-        new Set(),
-        { inputs: true, outputs: false },
-        { sort: 'relevance' },
-      ),
-    ),
-    ['session-good'],
+    rankSessions(
+      [
+        { sessionId: 'a', newestTime: 1000, maxCoverage: 1, totalOccurrences: 1 },
+        { sessionId: 'b', newestTime: 2000, maxCoverage: 1, totalOccurrences: 2 },
+      ],
+      'relevance',
+    ).map((session) => session.sessionId),
+    ['b', 'a'],
   )
-})
-
-test('regular expression mode still honours the whole-word toggle', () => {
-  const flags = { caseSensitive: false, whole: true, regex: true }
-  const matcher = buildMatcher('pip', flags)
-  assert.equal(matcher.find('pip3 has a bug'), -1)
-  assert.equal(matcher.find('we run pip here') >= 0, true)
-})
-
-test('highlight tokens strip quotes and exclusions', () => {
-  const matcher = buildMatcher('"pip install" !transformers torch', FLAGS)
-  assert.deepEqual(matcher.highlightTokens, ['pip', 'install', 'torch'])
-})
-
-test('a phrase wins over any number of scattered all-word messages', () => {
-  const corpus = new Map([
-    ['session-phrase', entry(['one pip install only'])],
-    [
-      'session-all-words',
-      entry([
-        'pip here, install there',
-        'pip again, install again',
-        'install now, pip later',
-        'pip pip pip, install install install',
-      ]),
-    ],
-  ])
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-phrase', 'session-all-words'])
-})
-
-test('phrase matches tie on characters, so the newer Session leads', () => {
-  const corpus = new Map([
-    ['session-one', entry(['pip install transformers'])],
-    [
-      'session-two',
-      entry(['pip install transformers today', 'again pip install transformers', 'still pip install transformers']),
-    ],
-  ])
-  // Both cover 24 characters; repetition adds nothing, so time decides.
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), ['session-two', 'session-one'])
-})
-
-test('the keywords have to appear somewhere in the Session, not in one message', () => {
-  const corpus = new Map([
-    ['session-partial', entry(['install only lives here'])],
-    ['session-words', entry(['pip appears in this message', 'and install appears in that one'])],
-  ])
-  // VS Code AND applies per file: the terms may sit on different lines. Only
-  // the Session that has both survives, even though no single message has both.
-  assert.deepEqual(ids(search(corpus, 'pip install', 'relevance')), ['session-words'])
-})
-
-test('time order is purely chronological, relevance order is not', () => {
-  const corpus = new Map([
-    ['session-phrase', entry(['old note: pip install transformers'], 500)],
-    ['session-words', entry(['newer note about pip, install and transformers'], 1500)],
-  ])
-  // Pure time: the newer Session leads even though it only scatters the words.
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'time')), ['session-words', 'session-phrase'])
-  // Relevance: 24 covered characters beat 22, no matter which Session is newer.
-  assert.deepEqual(ids(search(corpus, 'pip install transformers', 'relevance')), [
-    'session-phrase',
-    'session-words',
-  ])
-})
-
-test('one-word query stays a plain substring search', () => {
-  const corpus = new Map([
-    ['session-a', entry(['pip'])],
-    ['session-b', entry(['pip here', 'pip there'])],
-  ])
-  assert.deepEqual(ids(search(corpus, 'pip', 'relevance')), ['session-b', 'session-a'])
-})
-
-test('rows inside one Session follow the requested order', () => {
-  const entryRows = entry(['transformers later, then pip, then install', 'pip install transformers'])
-  const matcher = buildMatcher('pip install transformers', FLAGS)
-  const byTime = collectHits(entryRows, matcher, { inputs: true, outputs: false }, 'time')
-  assert.equal(byTime[0].message.text, 'pip install transformers')
-  const byRelevance = collectHits(entryRows, matcher, { inputs: true, outputs: false }, 'relevance')
-  assert.equal(byRelevance[0].exact, true)
-  assert.equal(byRelevance[0].message.text, 'pip install transformers')
-})
-
-test('compareHits compares covered characters, then time', () => {
-  const matcher = buildMatcher('pip install transformers', FLAGS)
-  const row = (text, time) => ({ seq: time, time, text, lower: text.toLowerCase() })
-  const hit = (text, time, kind = 'input') => {
-    const quality = matcher.analyze(text)
-    return { message: row(text, time), kind, matched: quality.matched, exact: quality.exact, chars: quality.chars }
-  }
-  const exact = hit('pip install transformers', 10)
-  const words = hit('pip and install and transformers', 99)
-  // 24 covered characters beat 22 even though the scattered row is newer.
-  assert.equal(compareHits(exact, words, 'relevance') < 0, true)
-  assert.equal(compareHits(words, exact, 'relevance') > 0, true)
-  // Pure time ignores the quality of the row.
-  assert.equal(compareHits(exact, words, 'time') > 0, true)
-  assert.equal(compareHits(words, exact, 'time') < 0, true)
-})
-
-test('relevanceOf is characters covered first, newest match second', () => {
-  const phrase = { maxChars: 24, newestTime: 10 }
-  const noise = { maxChars: 10, newestTime: 99 }
-  assert.deepEqual(relevanceOf(phrase), [24, 10])
-  assert.deepEqual(relevanceOf(noise), [10, 99])
-  assert.deepEqual(rankSessions([noise, phrase], 'relevance'), [phrase, noise])
-  // Equal coverage falls back to the newest match.
-  const newerNoise = { maxChars: 10, newestTime: 120 }
-  assert.deepEqual(rankSessions([noise, newerNoise], 'relevance'), [newerNoise, noise])
-})
-
-test('the excerpt opens on the phrase, not on an earlier stray keyword', () => {
-  const matcher = buildMatcher('pip install', FLAGS)
-  const body = 'check python3 -m pip -V first\nthen python3 -m pip install transformers'
-  const spot = matcher.locate(body)
-  // The row is there because of `pip install`; opening the excerpt on the
-  // earlier `pip -V` hides the reason it matched at all.
-  assert.equal(spot.index, body.indexOf('pip install'))
-  assert.equal(spot.length, 'pip install'.length)
-})
-
-test('whole-word mode opens on the phrase too, skipping near misses', () => {
-  const matcher = buildMatcher('pip install', WHOLE_FLAGS)
-  const body = 'piper installs nothing; later pip install transformers'
-  assert.equal(matcher.locate(body).index, body.indexOf('pip install'))
-  assert.equal(matcher.phrase('piper installs nothing'), false)
-})
-
-test('a row shows the phrase hit even when a newer row only scatters the words', () => {
-  const corpus = new Map([
-    ['session-mixed', entry(['old note: pip install transformers', 'newer note about pip only'])],
-  ])
-  const session = search(corpus, 'pip install', 'time')[0]
-  // Time order lists the newest row first, so hits[0] is the weak one; the row
-  // must still describe the phrase hit or the badge and excerpt lie.
-  assert.equal(session.hits[0].exact, false)
-  assert.equal(session.best.exact, true)
-  assert.equal(session.best.message.text, 'old note: pip install transformers')
 })
