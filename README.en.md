@@ -32,8 +32,9 @@ The DSH sidebar already has a search icon; it matches session titles. This plugi
 - **Millisecond results**: on one machine with one dataset, a search takes 0.7 ms median (p95 2.8 ms, worst 13 ms); comparable plugins range from 22–38 ms to 12 s.
 - **Usable right after install**: no FTS dependency, no external index service. On first start a ~3 MB sidecar index is built in the background: first results after about 2 s, fully built in 4.7 s. Backfill runs in child processes; the resident host process peaks around 70 MB.
 - **Only real user input is indexed**: by default only what you typed is searchable — skill catalogs and runtime-context injections from the harness do not pollute results. Tick "output" to search final answers as well.
-- **Query syntax**: spaces are AND, `"a phrase"` and `!excluded` are plugin extensions (VS Code's search box treats spaces literally and has no quote or `!` syntax); the case, whole-word and regex toggles follow VS Code's rules.
-- **No Chinese tokenizer needed**: `炒股界面` matches `优化炒股界面与 K线缩放` directly; when a long keyword has no hit **and whole word is off**, matching falls back to two-character chunks. Whole word pins the query as one literal unit and never splits it, so `这次改动` cannot match a Session that only contains `这次` and `改动` separately.
+- **VS Code semantics**: the whole typed string is one literal search string; spaces, quotes, `!` and punctuation are data. The `Aa` / `ab` / `.*` toggles only change case folding, ASCII word edges and regex interpretation. When nothing matches exactly, the search relaxes to n-gram coverage and says so in the results.
+- **No Chinese tokenizer needed**: `炒股界面` matches `优化炒股界面与 K线缩放` directly; with no exact hit, overlapping character pairs (`炒股` / `股界` / `界面`) relax the search by coverage, with no odd-length special case. Whole-word mode never relaxes.
+- **Explainable ordering**: time means the newest hit; relevance compares coverage first, then how often the query occurs in the Session, then recency.
 - **Search box in the header row**: the field expands in the Workspaces row with the same transition the built-in search uses (title, built-in search and actions collapse), and the whole sidebar switches to the search page.
 - **Keyword history**: press `↑` in the field to walk the last 10 keywords, `↓` to come back to what you were typing; stored in the browser, never in the session log.
 - **Picks up where you left off**: results page with keyword highlighting and a hover preview; clicking opens the session and scrolls to the first keyword (if that message is not loaded yet, the conversation opens at the top).
@@ -62,15 +63,16 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | Control | Behavior |
 | --- | --- |
 | Scope | By default only your input; tick "output" to also search each turn's final answer |
-| Multiple keywords | Plugin syntax: every space-separated keyword has to appear (AND) anywhere in the Session; `"pip install"` keeps a literal contiguous phrase; `!transformers` excludes Sessions containing it and `!"quick pip install"` excludes the phrase. VS Code's search box treats the whole string literally and has no quote or `!` syntax |
+| Spaces, quotes, `!` | Ordinary characters: `pip install` only matches the contiguous string `pip install`; it is not split into an AND; quotes and `!` carry no syntax |
 | `Aa` | Match case |
-| `ab` | Match whole word: the query stays one literal unit and the toggle only pins its two ASCII ends to word boundaries. A multi-keyword query must appear contiguously — `pip` here and `install` there does not count, nor does `xpip install`; a single keyword also skips glued forms such as `piper` or `installed`. Only ASCII letters, digits and underscore form a word (the `\b` rule VS Code actually applies), so `install` inside `--no-install-recommends` is a whole word; a Chinese keyword still matches as a contiguous substring inside Chinese prose. Whole-word mode never falls back to the Chinese chunk split, so results cannot contain sub-word matches |
+| `ab` | Match whole word: the query stays one literal unit and the toggle only pins its two ASCII ends to word boundaries; spaces remain literal. Only letters, digits and underscore form a word (the `\b` rule VS Code actually applies), so `xpip`, `pip3` and `pip_installer` do not match; a Chinese keyword still matches as a contiguous substring inside Chinese prose. Whole-word mode never relaxes |
 | `.*` | Regular expression; the panel reports an invalid pattern |
 | Folder icon | Filter by workspace, multi-select |
 | List icon | Group by session, showing where each session matched |
 | Sort icon | Sort by time (default) or relevance. Time is purely chronological: Sessions by their newest match, messages inside a Session newest first; match quality never jumps the queue. Relevance compares how many query characters one message covers — a whole phrase covers all of them, scattered words only their own letters, repetition never adds up — and falls back to time |
 | Row summary | Each row's excerpt and relevance badge come from the best-matching message of that Session, and the excerpt starts at the phrase, never at an earlier stray single keyword |
 | Keyboard | `↑` `↓` move through results; `↑` from the first row walks the keyword history (last 10, `↓` returns to what you were typing); `Enter` opens; `Esc` closes |
+| Approximate | With no exact hit, results relax to overlapping character-pair / word coverage (60% threshold); the status line says so and each row shows its coverage. Exact hits are never mixed with relaxed ones |
 | Click a result | Opens the session and highlights the first keyword; archived sessions are unarchived first |
 | Pagination | 24 per page, "Load more" at the bottom |
 
@@ -138,6 +140,16 @@ DSH writes each session to `~/.dsh/sessions/<workspace>/<session-id>/session.v4.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the diagrams and development notes.
 
 </details>
+
+## Development and tests
+
+```bash
+npm test                                  # node --test: behaviour, ordering, 20 acceptance queries (28 tests)
+node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
+node scripts/bench-search.mjs             # synthetic 20k-message search benchmark
+```
+
+Pass an older `index.mjs` to compare: `node scripts/bench-search.mjs /path/to/old-index.mjs`.
 
 Release history: [CHANGELOG.md](CHANGELOG.md).
 
