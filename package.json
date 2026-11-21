@@ -1,6 +1,6 @@
 {
   "name": "dsh-find-history",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "DSH Web plugin: an inline search box in the sidebar Workspaces header that finds a forgotten conversation by the words you typed in it, across every workspace.",
   "type": "module",
   "license": "MIT",
@@ -52,5 +52,13 @@
       "immediately": true,
       "inject": []
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sukirk/dsh-find-history.git"
+  },
+  "homepage": "https://github.com/sukirk/dsh-find-history#readme",
+  "bugs": {
+    "url": "https://github.com/sukirk/dsh-find-history/issues"
   }
 }

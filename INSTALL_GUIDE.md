@@ -4,11 +4,11 @@ Goal: install **dsh-find-history** into a DSH profile and confirm the sidebar se
 
 ## 0. Prerequisites
 
-- DSH `0.2.1-rc.x` with a Web profile (`dsh --profile web` serves the browser UI).
+- DSH `0.2.2` with a Web profile (`dsh --profile web` serves the browser UI); tested with `0.2.2-rc.3`, the plugin also runs on the latest `0.2.2-rc.x`.
 - Node.js ≥ 22.
 - A `dsh` command. If it is not on `PATH`, use the CLI inside the DSH installation instead:
   - local install: `<dsh-root>/node_modules/.bin/dsh`
-  - one-off: `npx --yes @deepseek-ai/dsh@0.2.1-rc.4`
+  - one-off: `npx --yes @deepseek-ai/dsh@0.2.2-rc.5`
 
 The commands below write `dsh`; substitute whichever form you have.
 
@@ -46,7 +46,7 @@ Fast automated check — the sidecar index is built automatically a few seconds 
 sleep 6; ls ~/.dsh/cache/find-history/sessions 2>/dev/null | wc -l   # expect one file per unarchived session, > 0
 ```
 
-The token for the Web UI is printed on stdout (`dsh web: http://127.0.0.1:<port>/?token=…`); DSH 0.2.1-rc.x does not write a `web.log`.
+The token for the Web UI is printed on stdout (`dsh web: http://127.0.0.1:<port>/?token=…`) and, since DSH 0.2.2, is also appended to `$DSH_HOME/web.log`.
 
 Human-visible checklist (open the URL from step 2):
 
@@ -68,7 +68,7 @@ grep -o 'dsh-find-history[^,]*' ~/.dsh/profiles/<profile>/package.json
 
 | Symptom | Fix |
 | --- | --- |
-| `dsh plugin add` reports a peer/engine warning | Harmless unless it is about `engines.dsh`; upgrade DSH to 0.2.1-rc.x. |
+| `dsh plugin add` reports a peer/engine warning | Harmless unless it is about `engines.dsh`; upgrade DSH to 0.2.2-rc.x. |
 | Icon missing after restart | Hard-reload the page (Ctrl+Shift+R). The icon is injected into the sidebar header at runtime. |
 | Panel opens but every search says "no results" | Give it a few seconds on first run: the index is built in child processes (~2s for ~130 sessions). The panel shows a "still indexing" line while that runs. |
 | Old sessions are not searchable | Archived sessions are excluded on purpose. Un-archive one to make it searchable again. |
