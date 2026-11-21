@@ -49,11 +49,20 @@ window.__ModuleLoader__.load({
 		const ANSWER_CACHE_MAX = 40;
 		/** Below this the surface shows the hint instead of results. */
 		const MIN_QUERY_LENGTH = 1;
+		/** Remembered keywords: ↑ pages through them one at a time. */
+		const HISTORY_MAX = 10;
+		const HISTORY_KEY = "dsh-find-history:queries.v1";
+		/** A keyword enters the history once its answer settled, so prefixes are not saved. */
+		const HISTORY_RECORD_MS = 1200;
 		/** Selectors into the shipped sidebar: hashed CSS-module names, matched by suffix. */
 		const HEADER_SELECTOR = '[class*="sectionHeader"]';
 		const SEARCH_SLOT_SELECTOR = '[class*="searchSlot"]';
 		const HEADER_ACTIONS_SELECTOR = '[class*="headerActions"]';
 		const TRIGGER_SLOT_CLASS = "shs-slot";
+		/** Our own expanding search row: the shipped header has no slot for it. */
+		const FIELD_SLOT_CLASS = "shs-search";
+		/** Set on the shipped header row while the search row is expanded. */
+		const HEADER_OPEN_ATTRIBUTE = "data-dsh-find-history-expanded";
 		const LABEL_SELECTOR = '[class*="sectionLabel"]';
 
 		const CSS = `
@@ -62,23 +71,32 @@ window.__ModuleLoader__.load({
 .shs-trigger:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
 ::highlight(dsh-shs-hit){background-color:color-mix(in srgb, var(--dsw-alias-state-business-primary) 46%, transparent);border-radius:2px}
 .shs-trigger svg{flex:none;width:16px;height:16px}
-.shs-slot{display:contents}
-.shs-trigger{margin-left:auto}
+.shs-slot{display:flex;flex:none;align-items:center;max-width:28px;margin-left:auto;overflow:hidden;transition:max-width 180ms var(--ds-ease-in-out),opacity 120ms var(--ds-ease-in-out)}
 [class*="sectionHeader"]:not(:has([class*="searchSlotExpanded"])) > [class*="searchSlot"]{margin-left:0}
-[class*="sectionHeader"]:has([class*="searchSlotExpanded"]) .shs-trigger{display:none}
-[class*="_rail"] .shs-trigger,[class*="_rail"] .shs-inline{display:none}
-[data-dsh-find-history-open] > [class*="listArea"]{display:none}
-[data-dsh-find-history-open] [class*="searchSlot"],[data-dsh-find-history-open] [class*="headerActions"]{display:none}
-.shs-inline{box-sizing:border-box;position:relative;flex:1 1 0%;min-height:0;display:flex;flex-direction:column;gap:6px;padding:2px 0 4px 4px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}
-.shs-field{flex:none;display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-tertiary)}
-.shs-field:focus-within{border-color:var(--dsw-alias-state-business-primary)}
-.shs-field>svg{flex:none;width:14px;height:14px}
-.shs-input{flex:1;min-width:0;margin:0;padding:0;border:none;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font:inherit}
+[class*="sectionHeader"]:has([class*="searchSlotExpanded"]) .shs-slot{max-width:0;opacity:0;pointer-events:none}
+[class*="_rail"] .shs-trigger,[class*="_rail"] .shs-search,[class*="_rail"] .shs-inline{display:none}
+[data-dsh-find-history-open] [data-sidebar-list-area],[data-dsh-find-history-open] [class*="listArea"]{display:none!important}
+[data-dsh-find-history-open]{height:100cqh;max-height:100cqh}
+[class*="sectionHeader"]:has(> .shs-slot){transition:margin-right 180ms var(--ds-ease-in-out),padding-inline 180ms var(--ds-ease-in-out),gap 180ms var(--ds-ease-in-out)}
+[class*="sectionHeader"]:has(> .shs-slot):has(> .shs-search)[data-dsh-find-history-expanded]{margin-right:0;padding-inline:calc(var(--dsh-sidebar-paint-inset,3px) + 1px);gap:0;overflow:hidden}
+[class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] > .shs-slot{max-width:0;opacity:0;pointer-events:none}
+[class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] > [class*="searchSlot"]{max-width:0;min-width:0;padding-left:0;overflow:hidden;pointer-events:none}
+[class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] > [class*="headerActions"]{max-width:0;min-width:0;opacity:0;transform:translateX(4px);visibility:hidden;pointer-events:none;overflow:hidden;transition-delay:0s,0s,0s,180ms}
+[class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] [class*="sectionLabel"]{max-width:0;margin-right:-4px;opacity:0;transform:translateX(-4px);visibility:hidden;transition-delay:0s,0s,0s,0s,180ms}
+.shs-search{box-sizing:border-box;flex:1 1 0;min-width:0;max-width:0;margin-left:-4px;display:flex;align-items:center;overflow:hidden;transition:max-width 180ms var(--ds-ease-in-out),margin-left 180ms var(--ds-ease-in-out)}
+[class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] > .shs-search{max-width:100%;margin-left:0}
+.shs-inline{box-sizing:border-box;position:relative;flex:1 1 0%;min-height:0;display:flex;flex-direction:column;gap:6px;padding:6px 0 4px 4px;overflow:hidden;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}
+@media (pointer:coarse){.shs-input{font-size:16px}}
+@media (prefers-reduced-motion:reduce){.shs-search,.shs-slot,[class*="sectionHeader"]:has(> .shs-slot){transition:none}}
+
+.shs-field{box-sizing:border-box;flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:2px;height:32px;padding:0 4px 0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-caption);overflow:hidden}
+.shs-field>svg{flex:none;width:14px;height:14px;margin:0 6px 0 8px}
+.shs-input{flex:1;min-width:0;margin:0 0 0 -2px;padding:0;border:none;outline:none;background:0 0;color:var(--dsw-alias-label-primary);font-size:13px;line-height:18px;font-family:inherit}
 .shs-input::placeholder{color:var(--dsw-alias-label-tertiary)}
-.shs-clear{display:inline-flex;flex:none;justify-content:center;align-items:center;width:20px;height:20px;padding:0;border:none;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer}
+.shs-clear{display:inline-flex;flex:none;justify-content:center;align-items:center;width:24px;height:24px;padding:0;border:none;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-secondary);cursor:pointer}
 .shs-clear:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .shs-clear svg{width:12px;height:12px}
-.shs-fields{flex:none;display:flex;align-items:center;gap:6px;padding:0 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
+.shs-fields{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:6px;row-gap:4px;padding:0 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
 .shs-check{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;white-space:nowrap}
 .shs-check input{width:12px;height:12px;margin:0;accent-color:var(--dsw-alias-state-business-primary);cursor:pointer}
 .shs-status{flex:none;padding:0 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
@@ -94,6 +112,7 @@ window.__ModuleLoader__.load({
 .shs-hit{margin:0;padding:0;background:0 0;color:var(--dsw-alias-state-business-primary);font-weight:500}
 .shs-row-meta{display:flex;align-items:center;gap:6px;min-width:0;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px}
 .shs-empty{flex:none;padding:18px 8px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:center}
+.shs-empty-note{margin-top:6px;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px}
 .shs-bar{flex:none;display:flex;align-items:center;gap:6px;min-width:0;padding:0 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
 .shs-select{box-sizing:border-box;min-width:0;flex:0 1 auto;max-width:120px;height:22px;padding:0 4px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
 .shs-chip{flex:none;box-sizing:border-box;height:22px;min-width:20px;padding:0 4px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11px;cursor:pointer}
@@ -101,17 +120,16 @@ window.__ModuleLoader__.load({
 .shs-chip[data-on="true"]{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
 .shs-spacer{flex:1 1 auto}
 .shs-note{flex:none;color:var(--dsw-alias-label-tertiary)}
-.shs-field .shs-chip{height:20px;min-width:18px;padding:0 3px;border:none;background:0 0;line-height:18px}
 .shs-whole{display:inline-block;padding-bottom:1px;border-bottom:1.5px solid currentColor;font-size:11px;line-height:12px;letter-spacing:.2px}
+.shs-field .shs-chip{height:20px;min-width:18px;padding:0 3px;border:none;background:0 0;font-size:10px;line-height:18px}
 .shs-field .shs-chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.shs-field .shs-chip[data-on="true"]{background:color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);color:var(--dsw-alias-state-business-primary)}
 .shs-tool{display:inline-flex;flex:none;justify-content:center;align-items:center;width:20px;height:20px;padding:0;border:none;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer}
 .shs-tool:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .shs-tool[data-on="true"]{color:var(--dsw-alias-state-business-primary)}
 .shs-tool svg{width:14px;height:14px}
 .shs-tip{position:fixed;z-index:1200;box-sizing:border-box;width:328px;padding:9px 11px;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-specific-menu);backdrop-filter:var(--dsw-menu-backdrop-filter);box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-primary);font-size:12px;line-height:19px;word-break:break-word;pointer-events:none;white-space:pre-wrap}
 .shs-tip-body{white-space:pre-wrap;line-height:19px}
-.shs-picker{position:absolute;top:70px;right:6px;z-index:6;display:flex;flex-direction:column;gap:2px;min-width:156px;max-height:240px;padding:5px;overflow:auto;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-elevation-panel,0 8px 24px rgba(0,0,0,.18))}
+.shs-picker{position:absolute;top:30px;right:6px;z-index:6;display:flex;flex-direction:column;gap:2px;min-width:156px;max-height:240px;padding:5px;overflow:auto;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-elevation-panel,0 8px 24px rgba(0,0,0,.18))}
 .shs-pick-item{display:flex;align-items:center;gap:7px;width:100%;height:27px;padding:0 8px;border:none;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;text-align:left;cursor:pointer}
 .shs-pick-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .shs-pick-item[data-on="true"]{color:var(--dsw-alias-state-business-primary)}
@@ -173,6 +191,7 @@ window.__ModuleLoader__.load({
 			invalidRegex: "正则表达式无效",
 			groupCount: "{count} 条命中",
 			clear: "清除关键词",
+			historyHint: "按 ↑ 回看最近搜过的关键词（最多 10 条）",
 			justNow: "刚刚",
 			minutesAgo: "{minutes} 分钟前",
 			hoursAgo: "{hours} 小时前",
@@ -211,6 +230,7 @@ window.__ModuleLoader__.load({
 			loadMore: "Load more",
 			invalidRegex: "Invalid regular expression",
 			groupCount: "{count} hits",
+			historyHint: "Press ↑ to reuse a recent keyword (up to 10)",
 			clear: "Clear keywords",
 			justNow: "just now",
 			minutesAgo: "{minutes} min ago",
@@ -388,6 +408,37 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * Keep the expanding search row as the header's last child, so it can grow
+		 * across the row the same way the shipped inline search does. The element
+		 * stays mounted while collapsed (max-width 0) so opening and closing are
+		 * CSS transitions instead of a mount/unmount pop.
+		 * @param header - tracked header row, or null while absent.
+		 * @returns {HTMLElement | null} slot to portal the search field into.
+		 */
+		function useFieldSlot(header) {
+			const [slot, setSlot] = useState(null);
+			useEffect(() => {
+				if (header === null) {
+					setSlot(null);
+					return undefined;
+				}
+				let element = header.querySelector(`:scope > .${FIELD_SLOT_CLASS}`);
+				if (element === null) {
+					element = document.createElement("div");
+					element.className = FIELD_SLOT_CLASS;
+					element.setAttribute("role", "search");
+					header.appendChild(element);
+				}
+				setSlot(element);
+				return () => {
+					element?.remove();
+					setSlot(null);
+				};
+			}, [header]);
+			return slot;
+		}
+
+		/**
 		 * Track the sidebar header row across sidebar remounts. Watching every
 		 * mutation would run a document query on each streamed token, so the
 		 * observer only reacts once the tracked row has detached.
@@ -423,7 +474,7 @@ window.__ModuleLoader__.load({
 		// -------------------------------------------------------------- surface
 
 		/** Dismiss the search surface on an outside pointer press or Escape. */
-		function useDismiss(open, close, triggerRef, surfaceRef) {
+		function useDismiss(open, close, triggerRef, surfaceRef, fieldRef) {
 			useEffect(() => {
 				if (!open) return undefined;
 				const onPointerDown = (event) => {
@@ -431,6 +482,8 @@ window.__ModuleLoader__.load({
 					if (!(target instanceof Node)) return;
 					if (triggerRef.current?.contains(target) === true) return;
 					if (surfaceRef.current?.contains(target) === true) return;
+					// The field lives in the shipped header row, outside the surface.
+					if (fieldRef?.current?.contains(target) === true) return;
 					close();
 				};
 				const onKeyDown = (event) => {
@@ -444,7 +497,7 @@ window.__ModuleLoader__.load({
 					document.removeEventListener("pointerdown", onPointerDown, true);
 					document.removeEventListener("keydown", onKeyDown, true);
 				};
-			}, [open, close, triggerRef, surfaceRef]);
+			}, [open, close, triggerRef, surfaceRef, fieldRef]);
 		}
 
 		// ------------------------------------------------------------- formatting
@@ -533,6 +586,43 @@ window.__ModuleLoader__.load({
 			return new Date(value).toLocaleDateString();
 		}
 
+		/**
+		 * Keywords this browser remembers from earlier searches, newest first.
+		 * Storage that is blocked or full yields an empty list instead of an error.
+		 * @returns {string[]} remembered keywords, at most {@link HISTORY_MAX}.
+		 */
+		function readHistory() {
+			if (typeof window === "undefined") return [];
+			try {
+				const raw = window.localStorage.getItem(HISTORY_KEY);
+				if (raw === null) return [];
+				const parsed = JSON.parse(raw);
+				if (!Array.isArray(parsed)) return [];
+				const kept = [];
+				for (const item of parsed) {
+					if (typeof item !== "string") continue;
+					const text = item.trim();
+					if (text === "" || kept.includes(text)) continue;
+					kept.push(text);
+					if (kept.length >= HISTORY_MAX) break;
+				}
+				return kept;
+			} catch {
+				return [];
+			}
+		}
+
+		/**
+		 * Persist the remembered keywords; a failed write keeps them for this page.
+		 * @param {string[]} list - keywords, newest first.
+		 */
+		function writeHistory(list) {
+			if (typeof window === "undefined") return;
+			try {
+				window.localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+			} catch {}
+		}
+
 		// ------------------------------------------------------------- component
 
 		/**
@@ -553,6 +643,8 @@ window.__ModuleLoader__.load({
 				const t = useMemo(() => createTranslator(props.t), [props.t]);
 				const header = useWorkspaceHeader();
 				const triggerSlot = useTriggerSlot(header);
+				/** Our expanding row in the shipped header; the field portals into it. */
+				const fieldSlot = useFieldSlot(header);
 				/** The shipped browser container that also holds the session list. */
 				const surfaceHost = header === null ? null : header.parentElement;
 				const [open, setOpen] = useState(false);
@@ -586,6 +678,19 @@ window.__ModuleLoader__.load({
 				const pickerRef = useRef(null);
 				const abortRef = useRef(null);
 				const answersRef = useRef(new Map());
+				/** The header slot that owns the field; outside presses there keep the surface. */
+				const fieldHostRef = useRef(null);
+				fieldHostRef.current = fieldSlot;
+				/** Keywords searched before; ↑ walks them from newest to oldest. */
+				const historyRef = useRef(undefined);
+				if (historyRef.current === undefined) historyRef.current = readHistory();
+				/** Index into historyRef while ↑/↓ browse it; -1 while typing. */
+				const historyIndexRef = useRef(-1);
+				/** What was being typed when history browsing started. */
+				const draftRef = useRef("");
+				/** The live keyword, for callbacks that must not resubscribe per keystroke. */
+				const queryRef = useRef(query);
+				queryRef.current = query;
 
 				/** Toggle one text pool; the last checked pool stays checked. */
 				const toggleField = useCallback((key) => {
@@ -603,12 +708,35 @@ window.__ModuleLoader__.load({
 					setCursor(0);
 				}, []);
 
+				/**
+				 * Add one keyword to the front of the history, deduplicated and capped.
+				 * A keyword is remembered only after its answer settled, so the list
+				 * holds what was searched rather than every intermediate keystroke.
+				 * @param {string} needle - the keyword to remember.
+				 */
+				const rememberQuery = useCallback((needle) => {
+					// Browsing history must not reorder it under the ↑/↓ cursor.
+					if (historyIndexRef.current >= 0) return;
+					const text = needle.trim();
+					if (text === "") return;
+					const current = historyRef.current;
+					// Shortening the newest keyword back to a prefix of it is not a new search.
+					if (current[0] !== undefined && current[0] !== text && current[0].startsWith(text)) return;
+					const next = [text, ...current.filter((item) => item !== text)].slice(0, HISTORY_MAX);
+					if (next.length === current.length && next.every((item, index) => item === current[index])) return;
+					historyRef.current = next;
+					writeHistory(next);
+				}, []);
+
 				const close = useCallback(() => {
 					abortRef.current?.abort();
+					historyIndexRef.current = -1;
+					rememberQuery(queryRef.current);
+					inputRef.current?.blur();
 					setPickerOpen(false);
 					setTip(null);
 					setOpen(false);
-				}, []);
+				}, [rememberQuery]);
 
 				/**
 				 * Turn the current controls into the Host query string.
@@ -753,6 +881,16 @@ window.__ModuleLoader__.load({
 					return () => clearTimeout(timer);
 				}, [open, status, result.pending, result.query, fields, matchers, shape]);
 
+				// Remember the keyword once its answer has settled: history then holds
+				// what was searched, not every intermediate keystroke.
+				useEffect(() => {
+					if (!open || status !== "ready") return undefined;
+					const settled = query.trim();
+					if (settled === "" || result.query !== settled) return undefined;
+					const timer = setTimeout(() => rememberQuery(settled), HISTORY_RECORD_MS);
+					return () => clearTimeout(timer);
+				}, [open, status, query, result.query, rememberQuery]);
+
 				// Clicking anywhere else dismisses the options popover.
 				useEffect(() => {
 					if (!pickerOpen) return undefined;
@@ -778,6 +916,18 @@ window.__ModuleLoader__.load({
 					surfaceHost.setAttribute(INLINE_ATTRIBUTE, "on");
 					return () => surfaceHost.removeAttribute(INLINE_ATTRIBUTE);
 				}, [surfaceHost, open]);
+
+				// Expand the shipped header row itself, so the field grows in place
+				// exactly like the native inline search instead of opening below it.
+				useEffect(() => {
+					if (header === null) return undefined;
+					if (!open) {
+						header.removeAttribute(HEADER_OPEN_ATTRIBUTE);
+						return undefined;
+					}
+					header.setAttribute(HEADER_OPEN_ATTRIBUTE, "on");
+					return () => header.removeAttribute(HEADER_OPEN_ATTRIBUTE);
+				}, [header, open]);
 
 				// A collapsed sidebar has no browser container to take over.
 				useEffect(() => {
@@ -830,7 +980,7 @@ window.__ModuleLoader__.load({
 					}
 				}, [open]);
 
-				useDismiss(open, close, triggerRef, surfaceRef);
+				useDismiss(open, close, triggerRef, surfaceRef, fieldHostRef);
 
 				// Keep the highlighted row inside the scroll viewport.
 				useEffect(() => {
@@ -853,6 +1003,47 @@ window.__ModuleLoader__.load({
 					setOpen(true);
 				};
 
+				/** Edit the keyword by hand; that ends ↑/↓ history browsing. */
+				const editQuery = (value) => {
+					historyIndexRef.current = -1;
+					setQuery(value);
+				};
+
+				/**
+				 * Step through remembered keywords: +1 is older, -1 is newer, and
+				 * stepping past the newest restores the keyword being typed.
+				 * @param {number} step - +1 older, -1 newer.
+				 * @returns {boolean} whether the input was changed.
+				 */
+				const recallHistory = (step) => {
+					const list = historyRef.current;
+					if (list.length === 0) return false;
+					if (historyIndexRef.current === -1) {
+						// ↑ from the keyword just searched would show it again; start at the
+						// previous one instead, so the first press always moves somewhere.
+						const start = list[0] === queryRef.current.trim() ? 1 : 0;
+						if (start >= list.length) return false;
+						draftRef.current = queryRef.current;
+						historyIndexRef.current = start;
+						setQuery(list[start]);
+						setCursor(0);
+						return true;
+					}
+					const next = historyIndexRef.current + step;
+					if (next < 0) {
+						historyIndexRef.current = -1;
+						setQuery(draftRef.current);
+					} else if (next < list.length) {
+						historyIndexRef.current = next;
+						setQuery(list[next]);
+					} else {
+						// Already on the oldest keyword: nothing older to show.
+						return true;
+					}
+					setCursor(0);
+					return true;
+				};
+
 				const openSession = async (item) => {
 					const uiWorkspace = service("uiWorkspace");
 					if (uiWorkspace === undefined || uiWorkspace === null) return;
@@ -873,17 +1064,41 @@ window.__ModuleLoader__.load({
 						setPickerOpen(false);
 						return;
 					}
-					const count = result.items.length;
-					if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+					if (event.key === "ArrowUp") {
+						// ↑ walks remembered keywords. Inside the result list it first
+						// walks the rows and enters history from the top one, so a shown
+						// answer is never skipped by accident.
+						if (historyIndexRef.current >= 0) {
+							event.preventDefault();
+							recallHistory(1);
+							return;
+						}
+						if (result.items.length > 0 && cursor > 0) {
+							event.preventDefault();
+							setCursor(cursor - 1);
+							return;
+						}
+						event.preventDefault();
+						if (!recallHistory(1) && result.items.length > 0) setCursor(result.items.length - 1);
+						return;
+					}
+					if (event.key === "ArrowDown") {
+						if (historyIndexRef.current >= 0) {
+							event.preventDefault();
+							recallHistory(-1);
+							return;
+						}
+						const count = result.items.length;
 						if (count === 0) return;
 						event.preventDefault();
-						setCursor((index) => {
-							const step = event.key === "ArrowDown" ? 1 : -1;
-							return (index + step + count) % count;
-						});
+						setCursor((index) => (index + 1) % count);
 						return;
 					}
 					if (event.key === "Enter") {
+						rememberQuery(queryRef.current);
+						// A recalled keyword starts a new search; its rows arrive after the
+						// debounce, so opening the row still on screen would open the wrong one.
+						if (result.query !== query.trim()) return;
 						const item = result.items[cursor];
 						if (item === undefined) return;
 						event.preventDefault();
@@ -1036,8 +1251,8 @@ window.__ModuleLoader__.load({
 										[TRIGGER_ATTRIBUTE]: "",
 										"aria-label": t("trigger"),
 										title: t("trigger"),
-										"aria-haspopup": "dialog",
 										"aria-expanded": open ? "true" : "false",
+										tabIndex: open ? -1 : 0,
 										onClick: toggle,
 									},
 									ICON,
@@ -1080,7 +1295,14 @@ window.__ModuleLoader__.load({
 
 				let body;
 				if (status === "idle") {
-					body = h("div", { className: "shs-empty" }, t("hint"));
+					body = h(
+						"div",
+						{ className: "shs-empty" },
+						t("hint"),
+						historyRef.current.length === 0
+							? null
+							: h("div", { className: "shs-empty-note" }, t("historyHint")),
+					);
 				} else if (status === "error") {
 					body = h("div", { className: "shs-empty" }, t("error"));
 				} else if (status === "ready" && result.items.length === 0) {
@@ -1164,6 +1386,100 @@ window.__ModuleLoader__.load({
 					);
 				}
 
+				// Matcher switches ride in the header pill like VS Code's search box does;
+				// they are only tabbable while the row is expanded.
+				const matcherChips = [
+					h(
+						"button",
+						{
+							key: "case",
+							type: "button",
+							className: "shs-chip",
+							"data-on": matchers.caseSensitive ? "true" : "false",
+							title: t("caseSensitive"),
+							tabIndex: open ? 0 : -1,
+							"aria-label": t("caseSensitive"),
+							onClick: () => toggleMatcher("caseSensitive"),
+						},
+						"Aa",
+					),
+					h(
+						"button",
+						{
+							key: "whole",
+							type: "button",
+							className: "shs-chip",
+							"data-on": matchers.whole ? "true" : "false",
+							title: t("wholeWord"),
+							tabIndex: open ? 0 : -1,
+							"aria-label": t("wholeWord"),
+							onClick: () => toggleMatcher("whole"),
+						},
+						h("span", { className: "shs-whole" }, "ab"),
+					),
+					h(
+						"button",
+						{
+							key: "regex",
+							type: "button",
+							className: "shs-chip",
+							"data-on": matchers.regex ? "true" : "false",
+							title: t("regex"),
+							tabIndex: open ? 0 : -1,
+							"aria-label": t("regex"),
+							onClick: () => toggleMatcher("regex"),
+						},
+						".*",
+					),
+				];
+
+				// The field always lives in the header row, even collapsed, so opening
+				// and closing are the same width transition the native search runs.
+				const field =
+					fieldSlot === null
+						? null
+						: createPortal(
+								h(
+									"div",
+									{ className: "shs-field", "aria-hidden": open ? null : "true" },
+									ICON,
+									h("input", {
+										ref: inputRef,
+										className: "shs-input",
+										type: "text",
+										value: query,
+										placeholder: t("placeholder"),
+										"aria-label": t("dialogTitle"),
+										autoComplete: "off",
+										spellCheck: false,
+										tabIndex: open ? 0 : -1,
+										onChange: (event) => editQuery(event.target.value),
+										onKeyDown,
+									}),
+									matcherChips,
+									open
+										? h(
+												"button",
+												{
+													type: "button",
+													className: "shs-clear",
+													"aria-label": t("clear"),
+													title: t("clear"),
+													tabIndex: 0,
+													onClick: () => {
+														editQuery("");
+														// Same gesture as the shipped search: the clear button
+														// empties the box and folds the row back.
+														close();
+													},
+												},
+												ICON_CLEAR,
+											)
+										: null,
+								),
+								fieldSlot,
+							);
+
 				const surface =
 					!open || surfaceHost === null
 						? null
@@ -1173,78 +1489,9 @@ window.__ModuleLoader__.load({
 									{
 										ref: surfaceRef,
 										className: "shs-inline",
-										role: "search",
+										role: "region",
 										"aria-label": t("dialogTitle"),
 									},
-									h(
-										"div",
-										{ className: "shs-field" },
-										ICON,
-										h("input", {
-											ref: inputRef,
-											className: "shs-input",
-											type: "text",
-											value: query,
-											placeholder: t("placeholder"),
-											"aria-label": t("dialogTitle"),
-											autoComplete: "off",
-											spellCheck: false,
-											onChange: (event) => setQuery(event.target.value),
-											onKeyDown,
-										}),
-										h(
-											"button",
-											{
-												type: "button",
-												className: "shs-chip",
-												"data-on": matchers.caseSensitive ? "true" : "false",
-												title: t("caseSensitive"),
-												"aria-label": t("caseSensitive"),
-												onClick: () => toggleMatcher("caseSensitive"),
-											},
-											"Aa",
-										),
-										h(
-											"button",
-											{
-												type: "button",
-												className: "shs-chip",
-												"data-on": matchers.whole ? "true" : "false",
-												title: t("wholeWord"),
-												"aria-label": t("wholeWord"),
-												onClick: () => toggleMatcher("whole"),
-											},
-											h("span", { className: "shs-whole" }, "ab"),
-										),
-										h(
-											"button",
-											{
-												type: "button",
-												className: "shs-chip",
-												"data-on": matchers.regex ? "true" : "false",
-												title: t("regex"),
-												"aria-label": t("regex"),
-												onClick: () => toggleMatcher("regex"),
-											},
-											".*",
-										),
-										query === ""
-											? null
-											: h(
-													"button",
-													{
-														type: "button",
-														className: "shs-clear",
-														"aria-label": t("clear"),
-														title: t("clear"),
-														onClick: () => {
-															setQuery("");
-															inputRef.current?.focus();
-														},
-													},
-													ICON_CLEAR,
-												),
-									),
 									h(
 										"div",
 										{ className: "shs-fields" },
@@ -1387,7 +1634,7 @@ window.__ModuleLoader__.load({
 								surfaceHost,
 							);
 
-				return h(React.Fragment, null, trigger, surface);
+				return h(React.Fragment, null, trigger, field, surface);
 			};
 		}
 

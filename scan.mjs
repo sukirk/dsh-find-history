@@ -44,6 +44,21 @@ const LINE_HEADER = 5
 export const MAX_MESSAGE_CHARS = 20_000
 
 /**
+ * Cap one message while keeping both ends: a pasted log is usually interesting
+ * at its head (the question) and its tail (the error), so cutting only the tail
+ * makes keywords after 20k characters permanently unfindable.
+ * @param {string} text - message text.
+ * @returns {string} text unchanged, or head + marker + tail within the cap.
+ */
+export function capMessageText(text) {
+  const value = String(text ?? '')
+  if (value.length <= MAX_MESSAGE_CHARS) return value
+  const marker = '\n…\n'
+  const half = Math.floor((MAX_MESSAGE_CHARS - marker.length) / 2)
+  return `${value.slice(0, half)}${marker}${value.slice(value.length - half)}`
+}
+
+/**
  * Read the first-party text of one user message.
  * @param {object} data - event payload of a `user/message` event.
  * @returns {string} joined text blocks, with blank lines collapsed.
@@ -146,7 +161,7 @@ function applyEvent(state, event) {
   }
   if (event.type === 'assistant/message') {
     const turn = Number.isFinite(event.data?.turn) ? event.data.turn : state.turn
-    const text = readAssistantText(event.data).slice(0, MAX_MESSAGE_CHARS)
+    const text = capMessageText(readAssistantText(event.data))
     if (text === '') return
     // Every step of a turn writes its own assistant message; only the last one
     // carries the answer, so an earlier step's text is replaced, not appended.
@@ -174,7 +189,7 @@ function applyEvent(state, event) {
   const text = readMessageText(event.data)
   if (text === '') return
   commitOutput(state)
-  const capped = text.slice(0, MAX_MESSAGE_CHARS)
+  const capped = capMessageText(text)
   state.messages.push({
     seq: Number.isFinite(event.seq) ? event.seq : 0,
     time: Number.isFinite(event.time) ? event.time : 0,
@@ -220,19 +235,87 @@ function createScanner(state) {
   }
 }
 
+/** How many candidate frame starts a damaged range may be probed at before giving up. */
+const MAX_RECOVERY_ATTEMPTS = 32
+
 /**
- * List the byte offsets at which zstandard frames start.
+ * Walk the zstandard frame that starts at `start` and return the offset just
+ * past it, without decompressing anything.
+ *
+ * A frame boundary cannot be found by searching for the magic number: the same
+ * four bytes can occur inside a compressed payload by chance, and treating that
+ * as a boundary splits a frame in half and loses its lines. Parsing the frame
+ * header and block headers instead always lands on the real boundary.
  * @param {Buffer} buffer - raw log bytes.
- * @returns {number[]} ascending frame offsets.
+ * @param {number} start - offset that must hold a frame magic.
+ * @returns {number | null} end offset, or null when the bytes do not hold a whole frame.
  */
-function frameOffsets(buffer) {
-  const offsets = []
-  let index = buffer.indexOf(FRAME_MAGIC, 0)
-  while (index !== -1) {
-    offsets.push(index)
-    index = buffer.indexOf(FRAME_MAGIC, index + FRAME_MAGIC.length)
+function frameEnd(buffer, start) {
+  if (start + 4 > buffer.length) return null
+  if (!buffer.subarray(start, start + 4).equals(FRAME_MAGIC)) return null
+  let pos = start + 4
+  if (pos >= buffer.length) return null
+  const descriptor = buffer[pos]
+  pos += 1
+  const contentSizeFlag = descriptor >> 6
+  const singleSegment = ((descriptor >> 5) & 1) === 1
+  const checksum = ((descriptor >> 2) & 1) === 1
+  const dictionaryFlag = descriptor & 0b11
+  // Window_Descriptor is present only when the frame does not carry its size.
+  if (!singleSegment) {
+    if (pos >= buffer.length) return null
+    pos += 1
   }
-  return offsets
+  const dictionaryBytes = dictionaryFlag === 0 ? 0 : dictionaryFlag === 1 ? 1 : dictionaryFlag === 2 ? 2 : 4
+  if (pos + dictionaryBytes > buffer.length) return null
+  pos += dictionaryBytes
+  const contentSizeBytes =
+    contentSizeFlag === 0 ? (singleSegment ? 1 : 0) : contentSizeFlag === 1 ? 2 : contentSizeFlag === 2 ? 4 : 8
+  if (pos + contentSizeBytes > buffer.length) return null
+  pos += contentSizeBytes
+  for (;;) {
+    if (pos + 3 > buffer.length) return null
+    const header = buffer[pos] | (buffer[pos + 1] << 8) | (buffer[pos + 2] << 16)
+    pos += 3
+    const lastBlock = (header & 1) === 1
+    const blockType = (header >> 1) & 0b11
+    const blockSize = header >>> 3
+    if (blockType === 0b11) return null // reserved block type: not a real frame
+    // RLE blocks store one byte that expands to blockSize bytes.
+    const payloadBytes = blockType === 0b01 ? 1 : blockSize
+    if (pos + payloadBytes > buffer.length) return null
+    pos += payloadBytes
+    if (lastBlock) break
+  }
+  if (checksum) {
+    if (pos + 4 > buffer.length) return null
+    pos += 4
+  }
+  return pos
+}
+
+/**
+ * Find the next offset at or after `from` where a frame starts and inflates.
+ * Used only after a frame failed: the payload may contain a stray magic, and a
+ * partially written frame must not swallow the frames that follow it.
+ * @param {Buffer} buffer - raw log bytes.
+ * @param {number} from - offset to start searching at.
+ * @returns {number} offset of a frame that decompresses to the end of the buffer, or -1.
+ */
+function recoverableFrame(buffer, from) {
+  let index = buffer.indexOf(FRAME_MAGIC, from)
+  let attempts = 0
+  while (index !== -1 && attempts < MAX_RECOVERY_ATTEMPTS) {
+    attempts += 1
+    try {
+      zstdDecompressSync(buffer.subarray(index))
+      return index
+    } catch {
+      /* not a real frame start either */
+    }
+    index = buffer.indexOf(FRAME_MAGIC, index + 1)
+  }
+  return -1
 }
 
 /**
@@ -247,40 +330,59 @@ export function createState() {
  * Inflate the frames of one log range into a Session state.
  * A trailing frame that does not inflate is a log being appended to; it stays
  * uncovered so the next pass reads it whole, because a partially written frame
- * must never be skipped.
+ * must never be skipped. A damaged frame in the middle is skipped (its lines are
+ * lost, which `damaged` reports) so the frames after it still arrive.
  * @param {Buffer} buffer - raw log bytes, starting at a frame boundary.
  * @param {object} state - Session state to fold into.
- * @returns {{ frames: number, consumed: number, complete: boolean }} coverage.
+ * @returns {{ frames: number, damaged: number, consumed: number, complete: boolean }} coverage.
  */
 export function scanBuffer(buffer, state) {
   const scanner = createScanner(state)
-  const offsets = frameOffsets(buffer)
   let frames = 0
+  let damaged = 0
   let consumed = 0
   let complete = true
-  for (let index = 0; index < offsets.length; index += 1) {
-    const start = offsets[index]
-    const end = index + 1 < offsets.length ? offsets[index + 1] : buffer.length
-    let plain
-    try {
-      plain = zstdDecompressSync(buffer.subarray(start, end))
-    } catch {
-      // The last frame is the one a Session may still be writing; stop before
-      // it. A damaged frame in the middle is skipped, its lines lost.
-      if (end === buffer.length) {
-        complete = false
-        consumed = start
-        break
-      }
-      consumed = end
-      continue
+  let cursor = 0
+  while (cursor < buffer.length) {
+    const start = buffer.indexOf(FRAME_MAGIC, cursor)
+    if (start === -1) {
+      // Bytes after the last complete frame that hold no frame magic at all are
+      // not a half-written frame; cover them so the next pass does not re-read
+      // the whole log looking for a boundary that never existed.
+      if (frames > 0) consumed = buffer.length
+      break
     }
-    scanner.push(plain)
-    frames += 1
-    consumed = end
+    const end = frameEnd(buffer, start)
+    if (end !== null) {
+      let plain = null
+      try {
+        plain = zstdDecompressSync(buffer.subarray(start, end))
+      } catch {
+        plain = null
+      }
+      if (plain !== null) {
+        scanner.push(plain)
+        frames += 1
+        consumed = end
+        cursor = end
+        continue
+      }
+    }
+    // This frame did not inflate: either it is still being written, or its
+    // payload contains a stray magic. Look for the next frame that really
+    // inflates and continue there instead of losing everything after it.
+    const recovered = recoverableFrame(buffer, start + 1)
+    if (recovered === -1) {
+      complete = false
+      consumed = start
+      break
+    }
+    damaged += 1
+    consumed = recovered
+    cursor = recovered
   }
   scanner.end()
-  return { frames, consumed, complete }
+  return { frames, damaged, consumed, complete }
 }
 
 /**
@@ -304,6 +406,7 @@ export function readLogFull(path) {
     messages: state.messages,
     outputs: state.outputs,
     frames: coverage.frames,
+    damaged: coverage.damaged,
     readBytes: coverage.consumed,
     size: buffer.length,
     complete: coverage.complete,
@@ -350,6 +453,7 @@ export function readLogTail(path, from, size) {
     messages: state.messages,
     outputs: state.outputs,
     frames: coverage.frames,
+    damaged: coverage.damaged,
     readBytes: from + coverage.consumed,
     size,
     complete: coverage.complete,

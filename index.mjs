@@ -26,7 +26,7 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
-  MAX_MESSAGE_CHARS,
+  capMessageText,
   mergeMessages,
   mergeOutputs,
   readAssistantText,
@@ -61,6 +61,10 @@ const DEFAULT_FIELDS = Object.freeze({ inputs: true, outputs: false })
 
 /** Longest accepted query, in characters. */
 const MAX_QUERY_CHARS = 300
+/** Longest accepted regex query: past this a pattern is a pasted mistake, and backtracking cost grows with it. */
+const MAX_REGEX_CHARS = 120
+/** Characters of one message a regex is run against; a pathological pattern over 20k chars stalls the Host loop. */
+const MAX_REGEX_SCAN_CHARS = 4_000
 /** Distinct keywords matched separately; more would only add noise and cost. */
 const MAX_TOKENS = 6
 /** Repeat queries are common while a user edits keywords; answers are cheap to reuse. */
@@ -228,11 +232,19 @@ function splitTokens(query) {
   return tokens
 }
 
-/** Characters that count as part of a word for whole-word matching. */
-const WORD_CHAR = /[a-z0-9_\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/i
+/**
+ * Characters that count as part of a word for whole-word matching: ASCII
+ * letters, digits and the underscore, the same set `\b` uses. Chinese characters
+ * are deliberately outside it: Chinese prose is not space-delimited, so treating
+ * 汉字 as word characters makes every Chinese keyword sit inside a longer "word"
+ * and whole-word mode would never match anything (「历史搜索」inside
+ * 「会话历史搜索插件」would be a miss). With this line the toggle keeps its
+ * meaning where a word boundary exists and leaves Chinese substrings alone.
+ */
+const WORD_CHAR = /[a-z0-9_]/i
 
 /**
- * Tell whether one character at an index continues a word.
+ * Tell whether one character at an index continues an ASCII word.
  * @param {string} text - haystack.
  * @param {number} index - position to inspect.
  * @returns {boolean} true when the position holds a word character.
@@ -243,17 +255,27 @@ function isWordCharAt(text, index) {
 }
 
 /**
- * Find the first standalone occurrence of one keyword.
+ * Find the first standalone occurrence of one keyword. Only an ASCII edge needs
+ * a boundary; a keyword that starts or ends with 汉字 has no word boundary to
+ * test, so that edge is skipped.
  * @param {string} text - haystack, already case-folded when needed.
  * @param {string} term - keyword.
  * @returns {number} index, or -1 when no standalone occurrence exists.
  */
 function findWhole(text, term) {
+  const pinStart = WORD_CHAR.test(term.charAt(0))
+  const pinEnd = WORD_CHAR.test(term.charAt(term.length - 1))
+  if (!pinStart && !pinEnd) return text.indexOf(term)
   let from = 0
   for (;;) {
     const at = text.indexOf(term, from)
     if (at === -1) return -1
-    if (!isWordCharAt(text, at - 1) && !isWordCharAt(text, at + term.length)) return at
+    if (
+      (!pinStart || !isWordCharAt(text, at - 1)) &&
+      (!pinEnd || !isWordCharAt(text, at + term.length))
+    ) {
+      return at
+    }
     from = at + 1
   }
 }
@@ -264,7 +286,10 @@ const CJK_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u
 /**
  * Split one long keyword into chunks worth retrying when it matched nothing:
  * Chinese has no word boundaries, so 「炒股界面」 is retried as 「炒股 界面」;
- * mixed Chinese and Latin text is split where the script changes.
+ * mixed Chinese and Latin text is split where the script changes. The chunks of
+ * a pure-Chinese keyword cover it completely: an odd trailing character joins
+ * the chunk before it, so 「炒股界面大」 is retried as 「炒股 界面大」 and a
+ * message that lacks the last character cannot answer for the whole keyword.
  * @param {string} token - one keyword from the query.
  * @returns {string[] | null} chunks to retry with, or null when there is nothing to split.
  */
@@ -273,13 +298,40 @@ function chunkKeywords(token) {
   if (chars.length < 4) return null
   if (chars.every((char) => CJK_CHAR.test(char))) {
     const chunks = []
-    for (let index = 0; index + 1 < chars.length; index += 2) {
-      chunks.push(chars[index] + chars[index + 1])
+    for (let index = 0; index < chars.length; index += 2) {
+      chunks.push(chars.slice(index, index + 2).join(''))
+    }
+    if (chunks.length > 1 && chunks[chunks.length - 1].length === 1) {
+      chunks[chunks.length - 2] += chunks.pop()
     }
     return chunks.length >= 2 ? chunks.slice(0, MAX_TOKENS) : null
   }
   const runs = token.match(/[a-z0-9]+|[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/giu) ?? []
   return runs.length >= 2 ? runs.slice(0, MAX_TOKENS) : null
+}
+
+/**
+ * Decide whether a failed search may be retried with the keyword split into
+ * chunks. Whole-word mode pins the query as one literal unit, so it never
+ * retries: the retry drops the toggle and would answer with sub-word matches
+ * (「这次」 here plus 「改动」 there) instead of the phrase the user asked for.
+ * A quoted phrase, an exclusion, a regular expression and multi-keyword
+ * queries are pinned the same way.
+ * @param {object} matcher - matcher of the search that returned nothing.
+ * @param {string[]} tokens - keywords that search used.
+ * @param {{ caseSensitive: boolean, whole: boolean, regex: boolean }} options - matcher flags.
+ * @returns {{ matcher: object, tokens: string[] } | null} retry matcher and its chunks, or null.
+ */
+function chunkRetryPlan(matcher, tokens, options) {
+  if (tokens.length !== 1) return null
+  if (options.regex !== false) return null
+  if (options.whole !== false) return null
+  if ((matcher.negatives?.length ?? 0) !== 0) return null
+  if (matcher.explicitPhrase === true) return null
+  const chips = chunkKeywords(tokens[0])
+  if (chips === null) return null
+  const chunked = buildMatcher(chips.join(' '), options)
+  return chunked === null ? null : { matcher: chunked, tokens: chips }
 }
 
 /**
@@ -345,6 +397,35 @@ function parseQueryParts(query) {
 }
 
 /**
+ * Decide whether a regular expression is too costly to run on the Host loop.
+ * The search runs synchronously over every stored message, so one pattern with
+ * catastrophic backtracking (`(a+)+$`) would freeze the whole web server. The
+ * check is deliberately conservative: it rejects the shapes that backtrack
+ * exponentially, not everything clever.
+ * @param {string} source - the regex the user typed.
+ * @returns {'query-too-long' | 'unsafe-regex' | null} the refusal, or null when it is safe to compile.
+ */
+function regexQueryProblem(source) {
+  if (typeof source !== 'string') return 'unsafe-regex'
+  if (source.length > MAX_REGEX_CHARS) return 'query-too-long'
+  // Blank escapes and character classes first: `[.+*]` is data, not quantifiers,
+  // and an escape's own letter must not be glued to the next quantifier.
+  const stripped = source.replace(/\\./gu, 'a').replace(/\[(?:[^\]\\]|\\.)*\]/gu, '[]')
+  // A quantifier inside a group that is itself quantified: (a+)+, (?:a{2})*, (.*)*.
+  if (/\((?:\?:|\?=|\?!|\?<=|\?<!)?(?:[^()]|\([^()]*\))*[+*}][^()]*\)\s*(?:[+*]|\{\d*,?\d*\})/u.test(stripped)) {
+    return 'unsafe-regex'
+  }
+  // A quantified group with alternatives: (a|ab)+, (a|a)*.
+  if (/\((?:\?:)?[^()]*\|[^()]*\)\s*(?:[+*]|\{\d*,?\d*\})/u.test(stripped)) return 'unsafe-regex'
+  // Two quantifiers in a row: a**, a{2}* and friends.
+  if (/(?:[+*]|\{\d*,?\d*\})\s*(?:[+*]|\{\d*,?\d*\})/u.test(stripped)) return 'unsafe-regex'
+  // Many quantifiers are a cost signal even without nesting.
+  const quantifiers = stripped.match(/[+*]|\{\d*,?\d*\}/gu)
+  if (quantifiers !== null && quantifiers.length > 12) return 'unsafe-regex'
+  return null
+}
+
+/**
  * Compile one query into the matching primitives the search needs: how many
  * keywords a text contains, where the first one starts, and whether the whole
  * phrase appears.
@@ -354,6 +435,7 @@ function parseQueryParts(query) {
  */
 function buildMatcher(query, options) {
   if (options.regex === true) {
+    if (regexQueryProblem(query) !== null) return null
     let expression
     try {
       expression = new RegExp(query, options.caseSensitive ? 'u' : 'iu')
@@ -361,10 +443,11 @@ function buildMatcher(query, options) {
       return null
     }
     // In regex mode VS Code still honours the whole-word toggle by wrapping the
-    // pattern in word boundaries.
+    // pattern in word boundaries. The boundary is ASCII, like `\b`: `\p{L}`
+    // would count 汉字 as word characters and reject every Chinese substring.
     const wholeExpression =
       options.whole === true
-        ? new RegExp(`(?<![\\p{L}\\p{N}_])(?:${query})(?![\\p{L}\\p{N}_])`, options.caseSensitive ? 'u' : 'iu')
+        ? new RegExp(`(?<![A-Za-z0-9_])(?:${query})(?![A-Za-z0-9_])`, options.caseSensitive ? 'u' : 'iu')
         : null
     if (wholeExpression !== null) {
       try {
@@ -373,10 +456,14 @@ function buildMatcher(query, options) {
         return null
       }
     }
+    // Bound the work per message: a safe pattern over 20k characters is still
+    // slower than the whole rest of a search, and only the opening of a pasted
+    // message is worth matching.
+    const clipped = (text) => (text.length > MAX_REGEX_SCAN_CHARS ? text.slice(0, MAX_REGEX_SCAN_CHARS) : text)
     const matchOne = (text) => {
       const source = wholeExpression ?? expression
       source.lastIndex = 0
-      return source.exec(text)
+      return source.exec(clipped(text))
     }
     const find = (text) => {
       const found = matchOne(text)
@@ -436,7 +523,9 @@ function buildMatcher(query, options) {
   const wholePhrasePattern =
     whole && terms.length > 1
       ? new RegExp(
-          `(?<![\\p{L}\\p{N}_])${phraseText.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`,
+          // ASCII edges only, for the same reason as findWhole: a Chinese phrase
+          // inside Chinese prose has no word boundary to hang on to.
+          `(?<![A-Za-z0-9_])${phraseText.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![A-Za-z0-9_])`,
           options.caseSensitive ? 'u' : 'iu',
         )
       : null
@@ -1000,6 +1089,19 @@ async function handleSearch(ctx, req, res) {
     })
     return
   }
+  if (options.regex === true) {
+    const problem = regexQueryProblem(query)
+    if (problem !== null) {
+      sendJson(res, 400, {
+        error: problem,
+        message:
+          problem === 'query-too-long'
+            ? `正则查询最长 ${MAX_REGEX_CHARS} 个字符；请改用子串搜索（去掉 regex=1）或缩短模式`
+            : '这个正则可能引发灾难性回溯，已拒绝执行；请改用子串搜索（去掉 regex=1）或简化模式',
+      })
+      return
+    }
+  }
   let matcher = buildMatcher(query, options)
   if (matcher === null) {
     sendJson(res, 400, { error: 'invalid-regex', message: 'invalid regular expression' })
@@ -1047,29 +1149,20 @@ async function handleSearch(ctx, req, res) {
   }
   try {
     let sessions = searchCorpus(matcher, tokens, skip, fields, filter)
-    if (
-      sessions.length === 0 &&
-      tokens.length === 1 &&
-      options.regex === false &&
-      options.whole === false &&
-      (matcher.negatives?.length ?? 0) === 0 &&
-      matcher.explicitPhrase !== true
-    ) {
+    if (sessions.length === 0) {
       // 「炒股界面」 has no space, so the substring misses a message that says
-      // 「炒股交易界面」; retry with its two-character chunks before giving up.
-      const chips = chunkKeywords(tokens[0])
-      if (chips !== null) {
-        const chunked = buildMatcher(chips.join(' '), options)
-        if (chunked !== null) {
-          // A guessed split only counts when one message carries every chunk:
-          // a single common chunk would answer for the whole query.
-          chunked.chunked = true
-          matcher = chunked
-          tokens = chips
-          sessions = searchCorpus(chunked, tokens, skip, fields, filter).filter(
-            (session) => session.maxMatched === chips.length,
-          )
-        }
+      // 「炒股交易界面」; retry with its chunks before giving up. The plan keeps
+      // whole-word, quoted, excluded and regex queries out of the retry.
+      const retry = chunkRetryPlan(matcher, tokens, options)
+      if (retry !== null) {
+        // A guessed split only counts when one message carries every chunk:
+        // a single common chunk would answer for the whole query.
+        retry.matcher.chunked = true
+        matcher = retry.matcher
+        tokens = retry.tokens
+        sessions = searchCorpus(retry.matcher, tokens, skip, fields, filter).filter(
+          (session) => session.maxMatched === tokens.length,
+        )
       }
     }
     const total = sessions.length
@@ -1191,7 +1284,7 @@ function appendLiveEvent(session, event) {
   if (event.type === 'assistant/message') {
     const live = corpus.get(sessionId)
     if (live === undefined) return
-    const text = readAssistantText(event.data).slice(0, MAX_MESSAGE_CHARS)
+    const text = capMessageText(readAssistantText(event.data))
     if (text === '') return
     const turn = Number.isFinite(event.data?.turn) ? event.data.turn : (live.turn ?? null)
     const seq = Number.isFinite(event.seq) ? event.seq : 0
@@ -1245,7 +1338,7 @@ function appendLiveEvent(session, event) {
   commitLiveOutput(entry, sessionId)
   const last = entry.messages[entry.messages.length - 1]
   if (last !== undefined && last.seq >= (Number(event.seq) || 0)) return
-  const capped = text.slice(0, 20_000)
+  const capped = capMessageText(text)
   entry.messages.push({
     seq: Number.isFinite(event.seq) ? event.seq : 0,
     time: Number.isFinite(event.time) ? event.time : 0,
@@ -1369,6 +1462,17 @@ function runBackfill(batch) {
       corpus.set(record.sessionId, doc)
     }
     if (indexed > 0) answerCache.clear()
+    let childReport = null
+    try {
+      childReport = JSON.parse(stdout)
+    } catch {
+      childReport = null
+    }
+    if (childReport !== null && (childReport.damaged > 0 || childReport.incomplete > 0)) {
+      pluginCtx?.logger?.warn?.(
+        `[find-history] backfill: ${childReport.damaged} damaged frame(s), ${childReport.incomplete} log(s) with an incomplete tail`,
+      )
+    }
     pluginCtx?.logger?.debug?.(`[find-history] backfill ${stdout.slice(0, 200)}`)
     pumpBackfill()
   }
@@ -1441,6 +1545,13 @@ async function sweepCorpus(ctx) {
           unseen.push(record)
           continue
         }
+        if (part.damaged > 0 || part.complete === false) {
+          // 损坏或还在写入的帧：告警，而不是把这段字节当成已读悄悄跳过。
+          ctx.logger?.warn?.(
+            `[find-history] ${record.sessionId}: ${part.damaged} damaged frame(s)` +
+              (part.complete === false ? ', tail frame incomplete (will retry)' : ''),
+          )
+        }
         applyPart(known, record, part)
         markDirty(record.sessionId)
         report.tailed += 1
@@ -1451,8 +1562,11 @@ async function sweepCorpus(ctx) {
       unseen.push(record)
     }
     for (const [sessionId, entry] of corpus) {
-      if (typeof entry.path !== 'string') continue
       if (alive.has(sessionId)) continue
+      // A Session with no log file is either live-only (kept while this Host
+      // still has it open) or was never written to disk; once it is gone from
+      // both sets the stale row must go too, or disposed Sessions stay findable.
+      if (liveSessions.has(sessionId) || entry.live === true) continue
       corpus.delete(sessionId)
       dirty.delete(sessionId)
       removeSessionDoc(paths, sessionId)
@@ -1546,4 +1660,14 @@ export function apply(ctx) {
  * unexported from the package surface: package.json only maps `./` to this
  * module for the Host, and nothing imports these names at runtime.
  */
-export { buildMatcher, collectHits, compareHits, rankSessions, relevanceOf, searchCorpusIn }
+export {
+  buildMatcher,
+  chunkKeywords,
+  chunkRetryPlan,
+  collectHits,
+  compareHits,
+  rankSessions,
+  regexQueryProblem,
+  relevanceOf,
+  searchCorpusIn,
+}

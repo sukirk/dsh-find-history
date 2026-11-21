@@ -99,6 +99,48 @@ test('whole word only adds boundaries around the phrase ends', () => {
   assert.equal(wholeMatcher.phrase('piper installs things'), false)
 })
 
+test('whole word leaves Chinese keywords alone, because Chinese has no word boundaries', () => {
+  // The reported regression: 「历史搜索」 matched as a substring, then vanished
+  // as soon as the whole-word toggle went on, because 话 and 插 around it were
+  // read as word characters. Chinese prose has no spaces, so a Chinese edge
+  // must not require a boundary.
+  const matcher = buildMatcher('历史搜索', WHOLE_FLAGS)
+  assert.equal(matcher.find('我打算把这个会话历史搜索插件开源到 github') > -1, true)
+  assert.equal(matcher.find('关于会话历史搜索 / Session History Search 的讨论') > -1, true)
+  assert.equal(matcher.phrase('会话历史搜索插件'), true)
+})
+
+test('whole-word mode still finds a Chinese keyword, like the substring search does', () => {
+  const corpus = new Map([
+    ['session-embedded', entry(['我打算把这个会话历史搜索插件开源到 github'], 500)],
+    ['session-spaced', entry(['关于 历史搜索 的讨论'], 1500)],
+  ])
+  assert.deepEqual(ids(search(corpus, '历史搜索', 'relevance', WHOLE_FLAGS)), [
+    'session-spaced',
+    'session-embedded',
+  ])
+})
+
+test('whole word still pins the ASCII edges of a keyword inside Chinese prose', () => {
+  const matcher = buildMatcher('pip', WHOLE_FLAGS)
+  assert.equal(matcher.find('用pip安装依赖'), 1)
+  assert.equal(matcher.find('pip 安装'), 0)
+  assert.equal(matcher.find('运行pip3'), -1)
+  assert.equal(matcher.find('xpip install'), -1)
+})
+
+test('a mixed keyword only pins its ASCII edge', () => {
+  const matcher = buildMatcher('搜索api', WHOLE_FLAGS)
+  assert.equal(matcher.find('历史搜索api文档'), 2)
+  assert.equal(matcher.find('历史搜索apidoc'), -1)
+})
+
+test('whole-word regex keeps Chinese substrings too', () => {
+  const matcher = buildMatcher('历史搜索', { ...WHOLE_FLAGS, regex: true })
+  assert.equal(matcher.find('会话历史搜索插件') > -1, true)
+  assert.equal(matcher.find('历史搜索 插件'), 0)
+})
+
 test('repeated spaces are word separators, like VS Code; quotes keep a phrase literal', () => {
   // Outside quotes VS Code splits on any whitespace run, so a double space is
   // the same two keywords as a single space.

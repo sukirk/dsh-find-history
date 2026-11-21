@@ -24,7 +24,7 @@ try {
 }
 
 const paths = { docs: docsDir }
-const report = { indexed: 0, frames: 0, skipped: 0 }
+const report = { indexed: 0, frames: 0, skipped: 0, damaged: 0, incomplete: 0 }
 
 for (const record of batch) {
 	if (typeof record?.path !== 'string' || typeof record?.sessionId !== 'string') {
@@ -51,6 +51,10 @@ for (const record of batch) {
 	})
 	report.indexed += 1
 	report.frames += part.frames
+	report.damaged += part.damaged ?? 0
+	// A frame that did not inflate is either still being written or damaged; the
+	// parent must hear about it instead of treating those bytes as read.
+	if (part.complete === false) report.incomplete += 1
 }
 
 process.stdout.write(JSON.stringify(report))
