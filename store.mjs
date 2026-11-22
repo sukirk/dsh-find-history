@@ -90,6 +90,7 @@ export function readSessionDoc(paths, sessionId) {
       seq: Number(row[0]) || 0,
       time: Number(row[1]) || 0,
       text: row[2],
+      truncated: row[3] === true,
       lower: row[2].toLowerCase(),
     })
   }
@@ -101,6 +102,7 @@ export function readSessionDoc(paths, sessionId) {
       time: Number(row[1]) || 0,
       text: row[2],
       turn: Number.isFinite(Number(row[3])) ? Number(row[3]) : null,
+      truncated: row[4] === true,
       lower: row[2].toLowerCase(),
     })
   }
@@ -137,8 +139,19 @@ export function saveSessionDoc(paths, sessionId, entry) {
     title: entry.title,
     live: entry.live === true,
     readAt: entry.readAt,
-    messages: entry.messages.map((message) => [message.seq, message.time, message.text]),
-    outputs: entry.outputs.map((output) => [output.seq, output.time, output.text, output.turn]),
+    messages: entry.messages.map((message) => [
+      message.seq,
+      message.time,
+      message.text,
+      message.truncated === true,
+    ]),
+    outputs: entry.outputs.map((output) => [
+      output.seq,
+      output.time,
+      output.text,
+      output.turn,
+      output.truncated === true,
+    ]),
   })
   const target = join(paths.docs, `${sessionId}.json`)
   const temporary = join(paths.docs, `${sessionId}.tmp`)

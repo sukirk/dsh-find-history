@@ -798,8 +798,15 @@ window.__ModuleLoader__.load({
 							headers: { accept: "application/json" },
 						});
 						if (!response.ok) {
-							const invalid = response.status === 400;
-							throw new Error(invalid ? t("invalidRegex") : `HTTP ${response.status}`);
+							let detail = "";
+							try {
+								const failure = await response.json();
+								detail = typeof failure?.message === "string" ? failure.message : "";
+							} catch {}
+							// A 400 carries the Host's reason (invalid regex, unsafe pattern,
+							// query too long); do not label every failure as a regex problem.
+							if (response.status === 400) throw new Error(detail || t("invalidRegex"));
+							throw new Error(`HTTP ${response.status}`);
 						}
 						const payload = await response.json();
 						if (controller.signal.aborted) return;

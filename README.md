@@ -144,7 +144,7 @@ DSH 将会话写入 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.z
 ## 开发与测试
 
 ```bash
-npm test                                  # node --test：行为、排序与 20 条验收查询（共 28 例）
+npm test                                  # node --test：行为、排序与 20 条验收查询（共 35 例）
 node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 node scripts/bench-search.mjs             # 2 万条消息的合成检索基准
 ```

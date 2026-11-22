@@ -144,7 +144,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the diagrams and development notes.
 ## Development and tests
 
 ```bash
-npm test                                  # node --test: behaviour, ordering, 20 acceptance queries (28 tests)
+npm test                                  # node --test: behaviour, ordering, 20 acceptance queries (35 tests)
 node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 node scripts/bench-search.mjs             # synthetic 20k-message search benchmark
 ```

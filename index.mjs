@@ -914,6 +914,19 @@ function describeMatches(ctx, sessions, group) {
 }
 
 /**
+ * List the known Workspaces, for the Client's scope selector.
+ * @param ctx - Host context.
+ * @returns {object[]} Workspaces with a display title.
+ */
+function listWorkspaces(ctx) {
+  return ctx.workspaceRegistry.list().map((workspace) => ({
+    id: workspace.id,
+    title: workspace.title || workspace.path.split('/').pop() || workspace.path,
+    path: workspace.path,
+  }))
+}
+
+/**
  * Write one JSON response.
  * @param res - response owned by this handler.
  * @param {number} status - HTTP status code.
