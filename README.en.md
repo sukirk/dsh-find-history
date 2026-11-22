@@ -66,7 +66,7 @@ Click the icon in the "Workspaces" header (a magnifier with a clock inside, plac
 | Spaces, quotes, `!` | Ordinary characters: `pip install` only matches the contiguous string `pip install`; it is not split into an AND; quotes and `!` carry no syntax |
 | `Aa` | Match case |
 | `ab` | Match whole word: the query stays one literal unit and the toggle only pins its two ASCII ends to word boundaries; spaces remain literal. Only letters, digits and underscore form a word (the `\b` rule VS Code actually applies), so `xpip`, `pip3` and `pip_installer` do not match; a Chinese keyword still matches as a contiguous substring inside Chinese prose. Whole-word mode never relaxes |
-| `.*` | Regular expression; the panel reports an invalid pattern |
+| `.*` | Regular expression (JavaScript syntax; `^`/`$` anchor to lines, like VS Code); the panel reports an invalid or unsafe pattern |
 | Folder icon | Filter by workspace, multi-select |
 | List icon | Group by session, showing where each session matched |
 | Sort icon | Sort by time (default) or relevance. Time is purely chronological: Sessions by their newest match, messages inside a Session newest first; match quality never jumps the queue. Relevance compares how many query characters one message covers — a whole phrase covers all of them, scattered words only their own letters, repetition never adds up — and falls back to time |
@@ -144,7 +144,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the diagrams and development notes.
 ## Development and tests
 
 ```bash
-npm test                                  # node --test: behaviour, ordering, 20 acceptance queries (35 tests)
+npm test                                  # node --test: behaviour, ordering, 20 acceptance queries (36 tests)
 node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 node scripts/bench-search.mjs             # synthetic 20k-message search benchmark
 ```

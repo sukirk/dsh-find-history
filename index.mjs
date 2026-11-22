@@ -468,7 +468,8 @@ function buildLiteralMatcher(query, options) {
  */
 function buildRegexMatcher(query, options) {
   if (regexQueryProblem(query) !== null) return null
-  const flags = options.caseSensitive ? 'u' : 'iu'
+  // `m` matches VS Code's line-oriented search: `^`/`$` anchor to lines.
+  const flags = options.caseSensitive ? 'mu' : 'imu'
   let expression
   let wholeExpression = null
   try {

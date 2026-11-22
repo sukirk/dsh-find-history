@@ -67,7 +67,7 @@ dsh plugin --profile web add github:sukirk/dsh-find-history
 | 空格 / 引号 / `!` | 都是普通字符：`pip install` 只匹配连续出现的 `pip install`，不会拆成两个词做 AND；引号和 `!` 不会被当成语法 |
 | `Aa` | 区分大小写 |
 | `ab` | 整词匹配：查询文本当作一整段字面量，开关只在首尾校验 ASCII 词边界；空格仍是字面量。词边界只认字母、数字、下划线（VS Code 的 `\b` 实际行为），`xpip`、`pip3`、`pip_installer` 不算整词；中文两侧没有这种边界，`历史搜索` 在「会话历史搜索插件」里仍按连续子串命中。整词模式**不启用近似放宽** |
-| `.*` | 正则，输入不合法时面板会提示 |
+| `.*` | 正则（JavaScript 语法，`^` / `$` 按行锚定，与 VS Code 一致）；输入不合法或可能灾难性回溯时面板会提示 |
 | 文件夹图标 | 按工作区筛选，可多选 |
 | 列表图标 | 按会话分组，显示每会话的命中位置 |
 | 排序图标 | 按时间（默认）或按相关度。按时间就是纯时间：会话按最新命中的消息排序，会话内的消息也从新到旧，不再让「整句/字数」插队。按相关度先比「一条消息覆盖了多少查询字符」——整句覆盖全部字符，散开的词只算各自的字母，重复命中不累加——覆盖一样多再按时间 |
@@ -144,7 +144,7 @@ DSH 将会话写入 `~/.dsh/sessions/<workspace>/<session-id>/session.v4.jsonl.z
 ## 开发与测试
 
 ```bash
-npm test                                  # node --test：行为、排序与 20 条验收查询（共 35 例）
+npm test                                  # node --test：行为、排序与 20 条验收查询（共 36 例）
 node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 node scripts/bench-search.mjs             # 2 万条消息的合成检索基准
 ```

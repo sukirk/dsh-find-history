@@ -35,7 +35,7 @@ node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 
 - 鉴权顺序别改：`handleSearch` 先校验方法是 GET，再 `ctx.connection.authorizeIndex(req, res)`，然后才解析查询；路由是 exact，拿不到 `/api` 的 body 上限，读请求本身没有 body。
 - 查询语义对齐 VS Code：整段输入是一个字面量，空格/引号/`!` 是数据；`Aa` / `ab` / `.*` 只影响大小写、ASCII 词边界和正则。不要重新引入 AND、引号短语或 `!` 排除。
-- 改动匹配器需同时覆盖 `buildMatcher`（literal/regex）、`findWholeFrom`（ASCII 边界）、`buildApproximateMatcher` + `queryUnits`/`scanUnits`（自动放宽，覆盖率和 60% 阈值）与 `searchWithRelaxation`（仅在无精确结果、非整词、非正则时启用），并在 `test/search-behavior.test.mjs` / `test/search-acceptance.test.mjs` 补用例。
+- 改动匹配器需同时覆盖 `buildMatcher`（literal/regex；正则用 `m` 标志让 `^`/`$` 按行锚定）、`findWholeFrom`（ASCII 边界）、`buildApproximateMatcher` + `queryUnits`/`scanUnits`（自动放宽，覆盖率和 60% 阈值）与 `searchWithRelaxation`（仅在无精确结果、非整词、非正则时启用），并在 `test/search-behavior.test.mjs` / `test/search-acceptance.test.mjs` 补用例。
 - 响应字段是客户端契约：`query`、`mode`、`truncated`、`limit`、`offset`、`total`、`matched`、`pending`、`group`、`workspaces`、`items`；`items` 的 `sessionId` / `title` / `cwd` / `workspaceId` / `workspaceTitle` 与 `snippet` / `head` / `match` / `tail` / `time` / `seq` / `kind` / `focus` / `coverage` / `truncated`，分组时还有 `totalHits` / `hits`。客户端高亮与跳转依赖 `focus`，不要改成语义字符串。
 - 语料文档格式变了必须 bump `DOC_VERSION`：旧文档会被当成空语料重建，不要写兼容旧格式的代码。
 - 缓存路径只能通过 `ctx.get('dshHomePath')('cache', …)` 解析，不要手拼 `~/.dsh`；拿不到缓存目录时让插件空跑，不要抛错影响 DSH 启动。

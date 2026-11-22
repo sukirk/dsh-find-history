@@ -164,6 +164,14 @@ test('regex mode searches the full message text', () => {
   assert.equal(matcher.locate(`${'x'.repeat(5_000)}needle`).index, 5_000)
 })
 
+test('regex anchors follow VS Code line boundaries', () => {
+  const heading = buildMatcher('^#{1,3}\\s+\\S+', REGEX)
+  assert.notEqual(heading.locate('intro\n## 修复清单\nbody').index, -1)
+  assert.equal(heading.locate('intro mid ## heading').index, -1)
+  const end = buildMatcher('done$', REGEX)
+  assert.notEqual(end.locate('all done\nnext line').index, -1)
+})
+
 test('regex whole word uses the same ASCII boundaries', () => {
   const matcher = buildMatcher('pip|install', { caseSensitive: false, whole: true, regex: true })
   assert.equal(matcher.locate('run pip now').index, 4)
