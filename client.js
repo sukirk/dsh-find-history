@@ -117,11 +117,14 @@ window.__ModuleLoader__.load({
 .shs-select{box-sizing:border-box;min-width:0;flex:0 1 auto;max-width:120px;height:22px;padding:0 4px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
 .shs-chip{flex:none;box-sizing:border-box;height:22px;min-width:20px;padding:0 4px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11px;cursor:pointer}
 .shs-chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.shs-chip[data-on="true"]{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-state-business-primary)}
+.shs-chip[data-on="true"]{border-color:var(--dsw-alias-state-business-primary);background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 24%,transparent);color:var(--dsw-alias-label-primary)}
+.shs-chip[data-on="true"]:hover{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 32%,transparent);color:var(--dsw-alias-label-primary)}
 .shs-spacer{flex:1 1 auto}
 .shs-note{flex:none;color:var(--dsw-alias-label-tertiary)}
 .shs-whole{display:inline-block;padding-bottom:1px;border-bottom:1.5px solid currentColor;font-size:11px;line-height:12px;letter-spacing:.2px}
 .shs-field .shs-chip{height:20px;min-width:18px;padding:0 3px;border:none;background:0 0;font-size:10px;line-height:18px}
+.shs-field .shs-chip[data-on="true"]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 28%,transparent);color:var(--dsw-alias-label-primary)}
+.shs-field .shs-chip[data-on="true"]:hover{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 36%,transparent)}
 .shs-field .shs-chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .shs-tool{display:inline-flex;flex:none;justify-content:center;align-items:center;width:20px;height:20px;padding:0;border:none;border-radius:var(--dsw-radius-sm);background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer}
 .shs-tool:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
