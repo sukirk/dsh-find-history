@@ -78,6 +78,7 @@ window.__ModuleLoader__.load({
 [data-dsh-find-history-open] [data-sidebar-list-area],[data-dsh-find-history-open] [class*="listArea"]{display:none!important}
 [data-dsh-find-history-open]{height:100cqh;max-height:100cqh}
 [class*="sectionHeader"]:has(> .shs-slot){transition:margin-right 180ms var(--ds-ease-in-out),padding-inline 180ms var(--ds-ease-in-out),gap 180ms var(--ds-ease-in-out)}
+[class*="sectionHeader"]:has(> .shs-slot) > [class*="sectionLabel"]{order:-1}
 [class*="sectionHeader"]:has(> .shs-slot):has(> .shs-search)[data-dsh-find-history-expanded]{margin-right:0;padding-inline:calc(var(--dsh-sidebar-paint-inset,3px) + 1px);gap:0;overflow:hidden}
 [class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] > .shs-slot{max-width:0;opacity:0;pointer-events:none}
 [class*="sectionHeader"]:has(> .shs-slot)[data-dsh-find-history-expanded] > [class*="searchSlot"]{max-width:0;min-width:0;padding-left:0;overflow:hidden;pointer-events:none}
@@ -450,6 +451,41 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * Keep the two foreign slots at their structural positions after React
+		 * reconciles the header. React inserts its own children around nodes it
+		 * does not own, so a re-rendered label can land in front of the trigger
+		 * slot and, because the slot carries the row's auto margin, push the whole
+		 * cluster right. This observer puts the trigger immediately before the
+		 * shipped search slot (and the field last) whenever the child list moves.
+		 * @param header - tracked header row, or null while absent.
+		 * @param triggerSlot - trigger slot element, or null before it mounts.
+		 * @param fieldSlot - expanding field slot, or null before it mounts.
+		 */
+		function useHeaderPlacement(header, triggerSlot, fieldSlot) {
+			useEffect(() => {
+				if (header === null) return undefined;
+				const place = () => {
+					const trigger = header.querySelector(`:scope > .${TRIGGER_SLOT_CLASS}`);
+					const field = header.querySelector(`:scope > .${FIELD_SLOT_CLASS}`);
+					if (trigger !== null) {
+						const search = header.querySelector(`:scope > ${SEARCH_SLOT_SELECTOR}`);
+						if (search !== null) {
+							if (trigger.nextElementSibling !== search) header.insertBefore(trigger, search);
+						} else {
+							const label = header.querySelector(`:scope > ${LABEL_SELECTOR}`);
+							if (label !== null && trigger.previousElementSibling !== label) label.after(trigger);
+						}
+					}
+					if (field !== null && header.lastElementChild !== field) header.appendChild(field);
+				};
+				place();
+				const observer = new MutationObserver(place);
+				observer.observe(header, { childList: true });
+				return () => observer.disconnect();
+			}, [header, triggerSlot, fieldSlot]);
+		}
+
+		/**
 		 * Track the sidebar header row across sidebar remounts. Watching every
 		 * mutation would run a document query on each streamed token, so the
 		 * observer only reacts once the tracked row has detached.
@@ -650,6 +686,7 @@ window.__ModuleLoader__.load({
 				const triggerSlot = useTriggerSlot(header);
 				/** Our expanding row in the shipped header; the field portals into it. */
 				const fieldSlot = useFieldSlot(header);
+				useHeaderPlacement(header, triggerSlot, fieldSlot);
 				/** The shipped browser container that also holds the session list. */
 				const surfaceHost = header === null ? null : header.parentElement;
 				const [open, setOpen] = useState(false);

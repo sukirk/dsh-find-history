@@ -40,7 +40,7 @@ node --check index.mjs scan.mjs store.mjs backfill.mjs client.js
 - 语料文档格式变了必须 bump `DOC_VERSION`：旧文档会被当成空语料重建，不要写兼容旧格式的代码。
 - 缓存路径只能通过 `ctx.get('dshHomePath')('cache', …)` 解析，不要手拼 `~/.dsh`；拿不到缓存目录时让插件空跑，不要抛错影响 DSH 启动。
 - 事件监听（`session/created`、`session/event`、`session/disposed`）与定时器都要在 dispose 里清掉，`corpus` 不能留在模块级内存里；归档会话通过 `workspaceRegistry.archivedSessionIds` 跳过。
-- 客户端挂载依赖侧边栏 CSS module 的类名后缀（`sectionHeader` / `searchSlot` / `headerActions` / `listArea`）和两个属性：容器上的 `data-dsh-find-history-open`（整页切到搜索面：隐藏 `.listArea` 并让区块占满侧边栏高度，`display:none !important` 用来压过宿主的 `.root:not(.rail) .listArea{display:block}`）、标题行上的 `data-dsh-find-history-expanded`（收起标题/原生搜索/操作按钮并展开搜索框）。搜索框常驻标题行、折叠时宽度为 0，靠 `max-width` 过渡做出与原生搜索一致的展开动画；改挂载点要同步改 `MutationObserver` 的重挂逻辑。
+- 客户端挂载依赖侧边栏 CSS module 的类名后缀（`sectionHeader` / `searchSlot` / `headerActions` / `listArea`）和两个属性：容器上的 `data-dsh-find-history-open`（整页切到搜索面：隐藏 `.listArea` 并让区块占满侧边栏高度，`display:none !important` 用来压过宿主的 `.root:not(.rail) .listArea{display:block}`）、标题行上的 `data-dsh-find-history-expanded`（收起标题/原生搜索/操作按钮并展开搜索框）。搜索框常驻标题行、折叠时宽度为 0，靠 `max-width` 过渡做出与原生搜索一致的展开动画；改挂载点要同步改 `MutationObserver` 的重挂逻辑，以及 `useHeaderPlacement` 的槽位归位逻辑（触发器固定在原生搜索前、输入框保持在行尾；标题用 `order:-1` 兜底）。
 
 ## 与上游的差异
 
